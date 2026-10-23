@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+sandbox-image/
+BACKEND_PROMPT.md
+seed_credentials.txt

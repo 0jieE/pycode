@@ -1,0 +1,16 @@
+# Dependencies and tool output
+node_modules
+playwright-report
+test-results
+coverage
+.vite
+*.log
+
+# Local settings and secrets (never committed)
+*.local
+.env
+.env.*
+# Playwright sign-in state (cookies), if a test ever saves one
+playwright/.auth
+
+# dist/ IS committed on purpose: a computer without Node.js installs the app from it (Nginx serves frontend/dist).

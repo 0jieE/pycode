@@ -1,0 +1,39 @@
+# Production / load-test overlay. Use together with the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Differences from development: gunicorn (4 workers) instead of `uvicorn --reload`, migrations run on start,
+# and the code comes from the image instead of a bind mount (so edits on disk do NOT affect running containers).
+services:
+  api:
+    command: ["sh", "-c", "alembic upgrade head && exec gunicorn -c gunicorn.conf.py app.main:app"]
+    volumes: !reset []
+    environment:
+      ENV: prod
+
+  worker:
+    volumes: !override
+      - /var/run/docker.sock:/var/run/docker.sock   # the workers (this one, practice-worker and interactive-worker) are the only services with the Docker socket
+    environment:
+      ENV: prod
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+
+  practice-worker:
+    volumes: !override
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      ENV: prod
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+
+  interactive-worker:
+    volumes: !override
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      ENV: prod
+      DB_POOL_SIZE: "10"
+      DB_MAX_OVERFLOW: "30"
+
+  beat:
+    volumes: !reset []
+    environment:
+      ENV: prod

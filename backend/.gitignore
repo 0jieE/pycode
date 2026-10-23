@@ -1,0 +1,25 @@
+# Secrets: never commit (copy .env.example to .env)
+.env
+.env.*
+!.env.example
+
+# Generated passwords (demo and e2e accounts)
+seed_credentials.txt
+e2e_credentials.txt
+
+# Database dumps and backups
+backups/
+*.sql
+*.sql.gz
+
+# Downloaded at install time by deploy/windows/install-nginx.ps1
+deploy/windows/nginx-*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/

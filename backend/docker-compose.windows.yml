@@ -1,0 +1,17 @@
+# Windows deployment (Docker Desktop): real lab-PC addresses for the seat map, the seat lock and per-PC rate limits.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.windows.yml up -d
+#   (+ -f docker-compose.prod.yml before this file for production: gunicorn, migrations on start)
+#
+# Docker Desktop shows every client to the containers as its gateway (172.28.0.1), so it cannot tell lab PCs apart.
+# In this mode a Nginx running on Windows itself (deploy/windows: install-nginx.ps1) listens on port 80 of the server,
+# sees each lab PC's real address and forwards to the Docker Nginx, which:
+#   * listens on 127.0.0.1:8080 ONLY: no lab PC can reach it directly, only the Windows machine itself;
+#   * believes X-Real-IP from the Docker gateway (nginx/realip-windows.conf), i.e. from that Windows Nginx.
+# Without the Windows Nginx running, nothing answers on port 80 in this mode.
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:${DOCKER_NGINX_PORT:-8080}:80"
+    volumes:
+      - ./nginx/realip-windows.conf:/etc/nginx/realip.d/windows.conf:ro

@@ -1,0 +1,5 @@
+# LF everywhere: the backend files run inside Linux containers (a CRLF shell script breaks there).
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

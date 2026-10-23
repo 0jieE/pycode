@@ -1,0 +1,51 @@
+# A SEPARATE stack for the frontend's Playwright tests, so they never touch the demo / development data:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d          (first time: also --build)
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml exec api python -m app.e2e_seed
+#
+# Its own project name, so its own containers, volumes (MySQL, Redis) and network: the only thing shared with the main
+# stack is the sandbox image. Nginx answers on http://localhost:8081 (E2E_NGINX_PORT). The database is migrated when
+# the api starts. Accounts: backend/e2e_credentials.txt (written by app.e2e_seed).
+# Stop it with `... down` (data kept) or `... down -v` (data deleted).
+name: lab-e2e
+
+services:
+  api:
+    # migrate on start; trust proxy headers only from THIS stack's Nginx (its own subnet, below)
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips 172.29.0.10"]
+    environment:
+      E2E: "1"
+      TRUSTED_PROXY_IPS: "172.29.0.10"
+
+  worker:
+    environment:
+      E2E: "1"
+      CELERY_CONCURRENCY: "4"
+      TRUSTED_PROXY_IPS: "172.29.0.10"
+    command: celery -A app.worker.celery_app worker -I app.worker.tasks -Q celery -c 4 --loglevel=INFO
+
+  practice-worker:
+    environment:
+      E2E: "1"
+
+  interactive-worker:
+    environment:
+      E2E: "1"
+    command: celery -A app.worker.celery_app worker -I app.worker.tasks -Q interactive -n interactive@%h --pool=threads -c 10 --loglevel=INFO
+
+  beat:
+    environment:
+      E2E: "1"
+
+  nginx:
+    ports: !override
+      - "${E2E_NGINX_PORT:-8081}:80"
+    networks:
+      default:
+        ipv4_address: 172.29.0.10
+
+networks:
+  default:
+    ipam:
+      config: !override
+        - subnet: 172.29.0.0/24

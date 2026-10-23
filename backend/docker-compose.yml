@@ -1,0 +1,186 @@
+name: lab-backend
+
+# Development stack. Only the workers (`worker` for labs, `practice-worker` for practice, `interactive-worker` for
+# interactive runs) mount the Docker socket.
+services:
+  mysql:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+      - --max-connections=200
+      - --innodb-buffer-pool-size=256M   # the data is small; keep RAM free for the sandboxes
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: always
+    env_file: .env
+    # Dev: hot reload via the bind mount below. Production uses the Dockerfile's gunicorn CMD.
+    # Proxy headers are believed only from Nginx's fixed address (below): a client cannot fake its IP.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips 172.28.0.10
+    volumes:
+      - ./:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  worker:
+    build: .
+    restart: always
+    env_file: .env
+    command: celery -A app.worker.celery_app worker -I app.worker.tasks -Q celery --loglevel=INFO   # lab runs only
+    environment:
+      # 6 worker processes each need only a connection or two (keeps MySQL's 200 connections for the api)
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+    volumes:
+      - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock   # only this service may start containers
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping -d celery@$$HOSTNAME -t 5"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # Practice runs (students' personal workspace) have their own queue and their own small worker, so they can
+  # never take capacity away from a lab. Same image and sandbox limits; PRACTICE_CONCURRENCY runs at a time.
+  practice-worker:
+    build: .
+    restart: always
+    env_file: .env
+    command: celery -A app.worker.celery_app worker -I app.worker.tasks -Q practice -n practice@%h -c ${PRACTICE_CONCURRENCY:-2} --loglevel=INFO
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+    volumes:
+      - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock   # starts sandboxes, like `worker`
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping -d practice@$$HOSTNAME -t 5"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # Interactive runs (the program pauses at input() and the student types live) hold a container open while they wait
+  # for the student, so they have their own queue and a THREAD pool (one thread per waiting run is cheap; a prefork
+  # process per waiting run is not). INTERACTIVE_CONCURRENCY runs at once; batch, test and grading jobs are untouched.
+  interactive-worker:
+    build: .
+    restart: always
+    env_file: .env
+    command: celery -A app.worker.celery_app worker -I app.worker.tasks -Q interactive -n interactive@%h --pool=threads -c ${INTERACTIVE_CONCURRENCY:-40} --loglevel=INFO
+    environment:
+      # a thread only needs the database for a moment at the start and the end of its run
+      DB_POOL_SIZE: "10"
+      DB_MAX_OVERFLOW: "30"
+    volumes:
+      - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock   # starts sandboxes, like `worker`
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping -d interactive@$$HOSTNAME -t 5"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  beat:
+    build: .
+    restart: always
+    env_file: .env
+    command: celery -A app.worker.celery_app beat --loglevel=INFO --schedule /tmp/celerybeat-schedule
+    volumes:
+      - ./:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # beat has no ping: check that its process exists (skipping this check's own process)
+      test: ["CMD", "python", "-c", "import os,sys; me=str(os.getpid()); sys.exit(0 if any(b'celery' in open(f'/proc/{p}/cmdline','rb').read() and b'beat' in open(f'/proc/{p}/cmdline','rb').read() for p in os.listdir('/proc') if p.isdigit() and p!=me and not b'/proc/' in open(f'/proc/{p}/cmdline','rb').read()) else 1)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    networks:
+      default:
+        ipv4_address: 172.28.0.10   # fixed: the api trusts X-Real-IP / X-Forwarded-For from this address only
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/api_proxy.conf:/etc/nginx/api_proxy.conf:ro
+      - ../frontend/dist:/usr/share/nginx/html:ro   # the React build (committed; `npm run build` in frontend/ remakes it)
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true   # Nginx resolves "api" once at start-up: re-create it whenever the api container changes
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+  redis_data:
+
+# A fixed subnet, so that Nginx can have a fixed address (TRUSTED_PROXY_IPS / forwarded_allow_ips).
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

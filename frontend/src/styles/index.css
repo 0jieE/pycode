@@ -1,0 +1,358 @@
+/*
+ * Tell Tailwind exactly where class names live. Left to itself it scans the whole project folder
+ * (it only honours .gitignore inside a git repository), so every write to dist/ or test-results/
+ * rebuilt the CSS and pushed a hot update into every open page.
+ */
+@import 'tailwindcss' source(none);
+@source '../../index.html';
+@source '../**/*.{ts,tsx}';
+
+/*
+ * Theme tokens. Components use these semantic names (bg-canvas, text-ink, bg-ok-soft ...), so the whole look
+ * lives here, for both themes (the light one overrides the colours below).
+ *
+ *   canvas    the page background                   surface    side bars, panels, cards, dialogs
+ *   surface-2 table headers, inactive tabs, wells    field      text boxes
+ *   brand-*   indigo-blue: 50 tint, 100 selected, 500 hover, 600 buttons, 700 links and selected text
+ *   accent    the second colour of the lively touches (status bar, avatar)
+ */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /* Comfortable sizes: 14px body text, 24px page titles, rounded corners. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.35rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 4px 16px -6px rgb(0 0 0 / 0.35);
+
+  --color-canvas: #0e1117;
+  --color-surface: #161a22;
+  --color-surface-2: #1d2330;
+  --color-field: #11151c;
+  --color-line: #272f3d;
+  --color-ink: #d5dbe5;
+  --color-ink-muted: #8e98aa;
+  /* Headings, the selected item, names: the brightest text. */
+  --color-ink-strong: #f6f8fc;
+  /* The tint under a row or button the pointer is on. */
+  --color-hover: rgb(255 255 255 / 0.06);
+
+  --color-brand-50: #1a2035;
+  --color-brand-100: #242f57;
+  --color-brand-500: #7590ff;
+  --color-brand-600: #5b78f6;
+  --color-brand-700: #93a9ff;
+  --color-focus: #7d93ff;
+  --color-accent: #a072f5;
+
+  /* The strip along the bottom (brand to accent), and the orange one when the laboratory is closed. */
+  --color-statusbar: #4f6bed;
+  --color-statusbar-2: #8a5cf6;
+  --color-statusbar-alert: #d9620f;
+
+  --color-btn-2: #232a37;
+  --color-btn-2-hover: #2d3646;
+  --color-danger: #d93a3a;
+  --color-danger-hover: #ec4d4d;
+
+  /* Status colours: the same meaning everywhere (badges, run status, banners). */
+  --color-ok: #4ade80;
+  --color-ok-soft: #10301f;
+  --color-error: #fb7d7d;
+  --color-error-soft: #3b1619;
+  --color-warn: #fbbf24;
+  --color-warn-soft: #3a2b0b;
+  --color-pending: #a7b0bf;
+  --color-pending-soft: #232a37;
+  --color-open: #7cc4fa;
+  --color-open-soft: #0d2c45;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* The app fills the window and its panels scroll themselves: the page as a whole never does. */
+body {
+  overflow: hidden;
+}
+
+:root {
+  /* Native pieces (select pop-ups, scrollbars, date pickers) draw themselves dark. */
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.012em;
+}
+
+::selection {
+  background: var(--selection-bg, #33427a);
+  color: var(--selection-fg, #fff);
+}
+
+/*
+ * The light theme (Settings > Theme: the user's choice, saved to their account): the same tokens, new values,
+ * so no component needs to know which theme is on. White cards on a cool grey page.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --selection-bg: #c7d2fe;
+  --selection-fg: #0f172a;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 4px 14px -6px rgb(15 23 42 / 0.12);
+
+  --color-canvas: #f4f6fb;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef1f7;
+  --color-field: #ffffff;
+  --color-line: #dde3ec;
+  --color-ink: #2a3344;
+  --color-ink-muted: #627089;
+  --color-ink-strong: #0f172a;
+  --color-hover: rgb(15 23 42 / 0.045);
+
+  --color-brand-50: #eef1ff;
+  --color-brand-100: #e0e6ff;
+  --color-brand-500: #4f6bed;
+  --color-brand-600: #4360ea;
+  --color-brand-700: #3449cf;
+  --color-focus: #5b78f6;
+  --color-accent: #8b5cf6;
+
+  --color-statusbar: #4360ea;
+  --color-statusbar-2: #7c4ef0;
+  --color-statusbar-alert: #d9620f;
+
+  --color-btn-2: #edf0f6;
+  --color-btn-2-hover: #e1e6ef;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+
+  --color-ok: #15803d;
+  --color-ok-soft: #dcfce7;
+  --color-error: #c81e1e;
+  --color-error-soft: #fee2e2;
+  --color-warn: #a15c07;
+  --color-warn-soft: #fef3c7;
+  --color-pending: #5b6678;
+  --color-pending-soft: #eef1f6;
+  --color-open: #1d5bd8;
+  --color-open-soft: #dbe8fe;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: -1px;
+  border-color: var(--color-focus);
+}
+
+/* Thin, quiet scrollbars like the editor's. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(140 150 170 / 0.45) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The content of a page: the same width rule everywhere. */
+@utility page {
+  margin-inline: auto;
+  display: flex;
+  width: 100%;
+  max-width: 1440px;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Behind the sign-in pages: two soft glows in the brand colours. */
+@utility auth-backdrop {
+  background:
+    radial-gradient(42rem 26rem at 18% 12%, rgb(91 120 246 / 0.16), transparent 70%),
+    radial-gradient(36rem 24rem at 85% 90%, rgb(138 92 246 / 0.13), transparent 70%),
+    var(--color-canvas);
+}
+
+/* A card: the panels pages are built from. */
+@utility card {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Code cards in tutorial lessons (features/tutorial/HighlightedCode.tsx): Dark+ / Light+ syntax colours. */
+:root {
+  --code-keyword: #569cd6;
+  --code-control: #c586c0;
+  --code-string: #ce9178;
+  --code-number: #b5cea8;
+  --code-comment: #6a9955;
+  --code-function: #dcdcaa;
+  --code-class: #4ec9b0;
+}
+
+:root[data-theme='light'] {
+  --code-keyword: #0000ff;
+  --code-control: #af00db;
+  --code-string: #a31515;
+  --code-number: #098658;
+  --code-comment: #008000;
+  --code-function: #795e26;
+  --code-class: #267f99;
+}
+
+.tok-keyword,
+.tok-bool,
+.tok-null,
+.tok-self {
+  color: var(--code-keyword);
+}
+
+.tok-controlKeyword,
+.tok-operatorKeyword {
+  color: var(--code-control);
+}
+
+.tok-string,
+.tok-string2 {
+  color: var(--code-string);
+}
+
+.tok-number {
+  color: var(--code-number);
+}
+
+.tok-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.tok-variableName.tok-function,
+.tok-function {
+  color: var(--code-function);
+}
+
+.tok-className,
+.tok-typeName {
+  color: var(--code-class);
+}
+
+/*
+ * Registration-code slips (features/admin/PrintSlips.tsx): invisible on screen. While they exist the page
+ * is marked body.printing-codes and the printout contains nothing else: 10 cut-out slips per A4 page.
+ */
+.print-slips {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  /* Paper is white, whatever the screen theme. */
+  :root {
+    color-scheme: light;
+  }
+
+  body.printing-codes > *:not(.print-slips) {
+    display: none !important;
+  }
+
+  body.printing-codes {
+    background: #fff;
+  }
+
+  body.printing-codes .print-slips {
+    display: block;
+  }
+
+  .slip-page {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: 55mm; /* 5 rows x 55 mm = 275 mm of the 277 mm A4 leaves after margins */
+    break-after: page;
+  }
+
+  .slip-page:last-child {
+    break-after: auto;
+  }
+
+  .slip {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.5mm;
+    padding: 4mm 5mm;
+    border: 1px dashed #555; /* the line to cut along */
+    color: #000;
+    font-size: 10pt;
+    break-inside: avoid;
+  }
+
+  .slip p {
+    margin: 0;
+  }
+
+  .slip-title {
+    color: #444;
+    font-size: 8pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .slip-code {
+    font-family: var(--font-mono);
+    font-size: 20pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .slip-url {
+    margin-top: auto;
+    font-size: 9pt;
+  }
+}

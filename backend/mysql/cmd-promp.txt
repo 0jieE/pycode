@@ -1,0 +1,10 @@
+
+
+
+docker compose exec mysql sh -c "mysql -u$MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE"
+
+SHOW TABLES;
+DESCRIBE users;
+SELECT id, username, role, is_active FROM users;
+SELECT * FROM registration_codes;
+exit

@@ -1,0 +1,21 @@
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+gunicorn>=22.0
+pydantic>=2.7
+pydantic-settings>=2.3
+sqlalchemy>=2.0,<2.1
+alembic>=1.13
+pymysql>=1.1
+cryptography>=42.0
+redis>=5.0
+celery>=5.4,<6.0
+docker>=7.1
+argon2-cffi>=23.1
+pyjwt>=2.8
+python-multipart>=0.0.9
+pyyaml>=6.0            # the tutorial lessons' front matter (content/tutorial)
+
+# tests + load test
+pytest>=8.2
+httpx>=0.27
+locust>=2.29
