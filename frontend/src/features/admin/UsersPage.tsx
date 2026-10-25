@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { HardDrive, KeyRound, Pencil, Upload, UserPlus } from 'lucide-react'
+import { Navigate, useParams } from 'react-router-dom'
+import { HardDrive, KeyRound, Pencil, UserPlus } from 'lucide-react'
 import { useResetPassword, useUpdateUser, useUsers } from '@/api/queries/users'
 import { errorMessage } from '@/api/errors'
-import type { Role, User } from '@/api/types'
-import { useAuth } from '@/auth/AuthContext'
+import type { User } from '@/api/types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -14,44 +13,41 @@ import { Skeleton } from '@/components/ui/Spinner'
 import { Table, Td, Th } from '@/components/ui/Table'
 import { TextField } from '@/components/ui/TextField'
 import { toast } from '@/components/ui/toastStore'
-import { USER_ROLE_PAGES, roleOfSlug } from '@/lib/adminRoutes'
+import { USER_ROLE_PAGES, roleOfSlug, type ManagedRole } from '@/lib/adminRoutes'
 import { useDebouncedValue } from '@/lib/debounce'
 import { formatDateTime } from '@/lib/time'
-import { ImportUsersDialog } from './ImportUsersDialog'
 import { ConfirmResetDialog, TemporaryPasswordDialog } from './ResetPasswordDialogs'
 import { UserFormDialog } from './UserFormDialog'
 import { UserStorageDialog } from './UserStorageDialog'
 
 const PAGE_SIZE = 15
 
-const ROLE_LABEL: Record<Role, string> = {
-  admin: 'Administrator',
-  instructor: 'Instructor',
-  student: 'Student',
-}
-
 type FormTarget = { user: User | null } | null
 
-/** Everyone, or one role's users (chosen in the side bar, UsersPanel). */
+/**
+ * The instructors, or the students (chosen in the side bar, UsersPanel; students by default). The administrator is
+ * the only admin and is not listed: their own account is under My account.
+ */
 export function UsersPage() {
   const { role: slug } = useParams()
+  const role = roleOfSlug(slug)
+  if (!role) return <Navigate to="/admin/users/students" replace />
   // A fresh search and page for each role.
-  return <UsersList key={slug ?? 'all'} role={roleOfSlug(slug) ?? ''} />
+  return <UsersList key={role} role={role} />
 }
 
-function UsersList({ role }: { role: Role | '' }) {
-  const { user: me } = useAuth()
+function UsersList({ role }: { role: ManagedRole }) {
+  const students = role === 'student'
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const q = useDebouncedValue(search)
-  const title = USER_ROLE_PAGES.find((p) => p.role === role)?.label ?? 'All users'
+  const title = USER_ROLE_PAGES.find((p) => p.role === role)?.label ?? 'Users'
 
   const users = useUsers({ page, size: PAGE_SIZE, q, role })
   const update = useUpdateUser()
   const reset = useResetPassword()
 
   const [form, setForm] = useState<FormTarget>(null)
-  const [importOpen, setImportOpen] = useState(false)
   const [toDeactivate, setToDeactivate] = useState<User | null>(null)
   const [toReset, setToReset] = useState<User | null>(null)
   const [storageOf, setStorageOf] = useState<User | null>(null)
@@ -88,22 +84,19 @@ function UsersList({ role }: { role: Role | '' }) {
   }
 
   const items = users.data?.items ?? []
-  const filtered = q.trim() !== '' || role !== ''
+  const filtered = q.trim() !== ''
 
   return (
     <div className="page">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">{title}</h1>
-        <div className="flex gap-2">
-          <Button onClick={() => setImportOpen(true)}>
-            <Upload aria-hidden className="size-4" />
-            Import CSV
-          </Button>
+        {/* Students create their own accounts with a registration code. */}
+        {!students && (
           <Button variant="primary" onClick={() => setForm({ user: null })}>
             <UserPlus aria-hidden className="size-4" />
-            New user
+            New instructor
           </Button>
-        </div>
+        )}
       </header>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -111,7 +104,7 @@ function UsersList({ role }: { role: Role | '' }) {
           <TextField
             label="Search"
             type="search"
-            placeholder="Name, username or student no."
+            placeholder={students ? 'Name, username or student no.' : 'Name or username'}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
@@ -132,19 +125,22 @@ function UsersList({ role }: { role: Role | '' }) {
       ) : users.isPending ? (
         <UsersSkeleton />
       ) : items.length === 0 ? (
-        <EmptyState title={filtered ? 'No users match' : 'There are no users yet'}>
+        <EmptyState
+          title={filtered ? 'No one matches' : students ? 'No students yet' : 'No instructors yet'}
+        >
           {filtered
-            ? 'Try a different search or role.'
-            : 'Create an account or import a CSV file of students.'}
+            ? 'Try a different search.'
+            : students
+              ? 'Students create their own accounts at /signup with a registration code.'
+              : 'Use New instructor to create an account.'}
         </EmptyState>
       ) : (
         <div className={users.isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
-          <Table caption="User accounts">
+          <Table caption={students ? 'Student accounts' : 'Instructor accounts'}>
             <thead>
               <tr>
                 <Th>Name</Th>
-                <Th>Student no.</Th>
-                <Th>Role</Th>
+                {students && <Th>Student no.</Th>}
                 <Th>Status</Th>
                 <Th>Created</Th>
                 <Th>
@@ -159,8 +155,7 @@ function UsersList({ role }: { role: Role | '' }) {
                     <p className="font-medium">{u.full_name}</p>
                     <p className="font-mono text-xs text-ink-muted">{u.username}</p>
                   </Td>
-                  <Td>{u.student_no ?? <span className="text-ink-muted">—</span>}</Td>
-                  <Td>{ROLE_LABEL[u.role]}</Td>
+                  {students && <Td>{u.student_no ?? <span className="text-ink-muted">—</span>}</Td>}
                   <Td>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={u.is_active ? 'ok' : 'pending'}>
@@ -190,25 +185,19 @@ function UsersList({ role }: { role: Role | '' }) {
                         <KeyRound aria-hidden className="size-3.5" />
                         Reset password
                       </Button>
-                      {u.role !== 'admin' && (
-                        <Button
-                          size="sm"
-                          aria-label={`Storage of ${u.full_name}`}
-                          title="Workspace storage: their own limits and what they use"
-                          onClick={() => setStorageOf(u)}
-                        >
-                          <HardDrive aria-hidden className="size-3.5" />
-                          Storage
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        aria-label={`Storage of ${u.full_name}`}
+                        title="Workspace storage: their own limits and what they use"
+                        onClick={() => setStorageOf(u)}
+                      >
+                        <HardDrive aria-hidden className="size-3.5" />
+                        Storage
+                      </Button>
                       {u.is_active ? (
                         <Button
                           size="sm"
                           aria-label={`Deactivate ${u.full_name}`}
-                          disabled={u.id === me?.id}
-                          title={
-                            u.id === me?.id ? "You can't deactivate your own account" : undefined
-                          }
                           onClick={() => setToDeactivate(u)}
                         >
                           Deactivate
@@ -241,7 +230,6 @@ function UsersList({ role }: { role: Role | '' }) {
         user={form?.user ?? null}
         onClose={() => setForm(null)}
       />
-      <ImportUsersDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <UserStorageDialog user={storageOf} onClose={() => setStorageOf(null)} />
 
       <ConfirmDialog

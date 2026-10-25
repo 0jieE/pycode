@@ -105,7 +105,7 @@ test('the code editor follows the theme, unless it is set on its own', async () 
 test('administrators have the gear too', async ({ browser }) => {
   const admin = await (await browser.newContext()).newPage()
   await signIn(admin, 'admin')
-  await expect(admin.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
+  await expect(admin.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
   const settings = await openSettings(admin)
   await expect(settings.getByRole('radiogroup', { name: 'Theme' })).toBeVisible()
   await admin.close()

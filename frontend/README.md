@@ -56,7 +56,7 @@ src/
   auth/       AuthProvider, RequireRole (route guard per role)
   components/ ui/ (Button, Dialog, Table, Toast ...), Shell, Topbar, ActivityBar, PageFrame
   features/   admin/ instructor/ student/ workspace/ (the IDE) auth/
-  lib/        time.ts (Asia/Manila), paths.ts, csv.ts, format.ts, prefs.ts ...
+  lib/        time.ts (Asia/Manila), paths.ts, format.ts, prefs.ts ...
 e2e/          Playwright specs
 ```
 
@@ -74,9 +74,9 @@ changing the look means editing that one file.
   both are the same size and colour everywhere. Fields are 36px tall.
 - The sign-in pages sit on a soft brand glow (`auth-backdrop`). Printed slips stay black on white.
 
-**Every role** has the same frame (`components/Shell.tsx`). Pages without a list beside them (Account settings)
+**Every role** has the same frame (`components/Shell.tsx`). Pages without a list beside them (My account)
 use `components/PageFrame.tsx`; Classes, My classes and Labs add their list as a second side bar, and so do the
-administrator's pages (`components/SidePanel.tsx`: Users by role, Registration Codes by batch, Storage by role;
+administrator's pages (`components/SidePanel.tsx`: Users as Instructors / Students, Registration Codes by batch, Storage by role;
 the search stays in the page):
 
 - a **top bar** on every page: the path (for a student My classes › the class › Workspace; for an instructor
@@ -90,10 +90,21 @@ the search stays in the page):
   to create a class (archiving is done from the class's own page). The student's IDE brings its own explorer
   as its second side bar instead.
 
-### Account settings and the forced password change
+### Users (administrator)
 
-Every role has **Account settings** (`/account`; click your name in the top bar, or the badge in the icon strip
-or the administrator's side bar):
+There is **one administrator**, who is not listed. **Users** has two tabs in its side bar, **Instructors** and
+**Students** (with counts from `GET /users/counts`; Users opens on Students). The search stays in the page.
+
+- **Instructors**: **New instructor** opens the account form, which only makes instructors (students sign up
+  with a code); the temporary password must be changed at the first sign-in. Editing an account shows its
+  role read-only.
+- **Students**: no New or Import buttons: students create their own accounts at `/signup` with a registration
+  code. Each row: Edit, Reset password (shown once), Storage, Deactivate / Activate.
+
+### My account and the forced password change
+
+Every role has **My account** (`/account`): open the **account menu** (your name and initials, top right) and
+choose _My account_ (the same menu signs out), or click the badge at the bottom of the icon strip:
 
 - **Profile**: full name and username can be edited (a username is lower case, 4–32 characters of `a-z 0-9 . _`;
   a taken one is refused next to the field). The form sends only the fields that changed, because the server
@@ -102,7 +113,7 @@ or the administrator's side bar):
 - **Password**: current password, then the new one typed twice (checked in the browser, never sent), 8 to 128
   characters. This device stays signed in. After 5 wrong tries in 15 minutes the server answers 429 and the
   form says to try again in a few minutes.
-- **Forced change**: a user whose password an administrator reset (or who came from a CSV import) has
+- **Forced change**: a user whose password the administrator reset (or set when creating the account) has
   `must_change_password`. They can sign in, but every page sends them to the **Change your password** screen
   (`/change-password`) until they have chosen their own: the route guard looks at the flag, and any request
   answered 403 `PASSWORD_CHANGE_REQUIRED` (or a refused WebSocket) triggers the same redirect
@@ -414,8 +425,8 @@ npm test
 ```
 
 They run in a second and need no backend. They cover the logic: which endpoints a workspace uses (class or Practice), paths and file-name rules, the tree builder and
-folder renames (`treeUtils`), Manila time formatting, the API error parser and client (401 handling), CSV
-import preview, the editor store and the saver (one save at a time, conflicts, a closed lab), the run flow
+folder renames (`treeUtils`), Manila time formatting, the API error parser and client (401 handling), the
+editor store and the saver (one save at a time, conflicts, a closed lab), the run flow
 (queue, streaming, polling fallback, 429/503), the WebSocket helper (reconnect backoff, close codes) and the
 monitor's live updates.
 
@@ -455,7 +466,7 @@ test backend when it runs out of them.
 | `journey.spec.ts`         | The whole course of a lab through the UI only: admin creates a student, instructor makes a class and code, the student joins, approval, session open, activity published, the student edits/saves/runs/submits, access closed (read-only), a second login kicks the first                                         |
 | `offline.spec.ts`         | Walks every major screen as all three roles and fails if any request goes to another host                                                                                                                                                                                                                         |
 | `auth.spec.ts`            | Login for each role, wrong password, route guards, the "signed in on another device" banner                                                                                                                                                                                                                       |
-| `admin.spec.ts`           | Users table, create/edit/deactivate, reset password (shown once), CSV import                                                                                                                                                                                                                                      |
+| `admin.spec.ts`           | Users: Instructors / Students tabs, New instructor, edit/deactivate, reset password (shown once)                                                                                                                                                                                                                  |
 | `instructor.spec.ts`      | Classes, invite codes (window, switch, badges), approvals, sessions, activities, submissions                                                                                                                                                                                                                      |
 | `student.spec.ts`         | Joining, class home with Submitted/Late badges, the whole workspace (autosave, versions, conflicts, rename, delete, quick open, submit, read-only)                                                                                                                                                                |
 | `run.spec.ts`             | Run in the real sandbox: streaming, input, imports, crashes, timeout and output limit, 429/503, socket failure                                                                                                                                                                                                    |

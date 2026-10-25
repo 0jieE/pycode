@@ -20,7 +20,7 @@ from app.models.invite_code import InviteCode
 from app.models.registration_code import RegistrationCode
 from app.models.user import Role, User
 from app.schemas.registration import RegistrationCodeCreate
-from app.services import registration_service
+from app.services import registration_service, user_service
 
 STUDENT_COUNT = 40
 DEMO_BATCH = "Demo batch"
@@ -63,9 +63,20 @@ def _ensure_demo_registration_codes(db: Session, result: SeedResult, admin: User
     result.registration_codes = created.codes
 
 
+def _ensure_admin(db: Session, result: SeedResult) -> User:
+    """The one administrator: created on the first run only (whatever its username became later)."""
+    admin = user_service.get_admin(db)
+    if admin is not None:
+        result.accounts.append((admin.username, Role.ADMIN.value, None))
+        return admin
+    admin, password = user_service.create_admin(db, "admin", "System Administrator")
+    result.accounts.append((admin.username, Role.ADMIN.value, password))
+    return admin
+
+
 def seed(db: Session) -> SeedResult:
     result = SeedResult()
-    admin = _ensure_user(db, result, "admin", "System Administrator", Role.ADMIN)
+    admin = _ensure_admin(db, result)
     instructor = _ensure_user(db, result, "instructor1", "Instructor One", Role.INSTRUCTOR)
     _ensure_user(db, result, "instructor2", "Instructor Two", Role.INSTRUCTOR)
     for i in range(1, STUDENT_COUNT + 1):

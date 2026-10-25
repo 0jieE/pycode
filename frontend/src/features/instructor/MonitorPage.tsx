@@ -1,6 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, Eye, LayoutGrid, TimerReset, Wifi, WifiOff } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  Eye,
+  LayoutGrid,
+  TimerReset,
+  Wifi,
+  WifiOff,
+} from 'lucide-react'
 import { useClass } from '@/api/queries/classes'
 import { useMonitorSnapshot } from '@/api/queries/monitor'
 import { useSessions, useUpdateSession } from '@/api/queries/sessions'
@@ -20,14 +30,16 @@ import { SessionClock } from '@/components/SessionClock'
 import { toast } from '@/components/ui/toastStore'
 import { baseName } from '@/lib/paths'
 import { matchesSearch } from '@/lib/tableView'
-import { formatTimeOfDay, timeAgo } from '@/lib/time'
+import { formatDateTime, formatTimeOfDay, isToday, timeAgo } from '@/lib/time'
 import { useIdParam } from '@/lib/params'
 import { useNow } from '@/lib/useNow'
 import {
   filterStudents,
   monitorCounts,
   type LastTestInfo,
+  sortByStarted,
   type MonitorFilter,
+  type StartedSort,
 } from './monitorState'
 import { SignInsTable } from './SignInsTable'
 
@@ -54,6 +66,7 @@ const FILTERS: { id: MonitorFilter; label: string }[] = [
   { id: 'offline', label: 'Offline' },
   { id: 'errors', label: 'Has errors' },
   { id: 'unsubmitted', label: 'Not submitted' },
+  { id: 'notstarted', label: 'Not started' },
 ]
 
 export function MonitorPage() {
@@ -94,6 +107,8 @@ function Monitor({ classId, sessionId }: { classId: number; sessionId: number })
   const [changingLab, setChangingLab] = useState(false)
   const [filter, setFilter] = useState<MonitorFilter>('all')
   const [search, setSearch] = useState('')
+  // null: the class's own order; else by when each student started (not started always last).
+  const [startedSort, setStartedSort] = useState<StartedSort | null>(null)
   const [socketStatus, setSocketStatus] = useState<SocketStatus>('connecting')
   const [refused, setRefused] = useState<string | null>(null)
   const now = useNow(10_000)
@@ -149,12 +164,13 @@ function Monitor({ classId, sessionId }: { classId: number; sessionId: number })
   const students: StudentMonitor[] =
     snapshot.data && base === snapshot.data ? liveStudents : (snapshot.data?.students ?? [])
   const counts = monitorCounts(students)
-  const shown = filterStudents(students, filter).filter((s) =>
+  const matching = filterStudents(students, filter).filter((s) =>
     matchesSearch(
       `${s.student.full_name} ${s.student.username} ${s.student.student_no ?? ''}`,
       search,
     ),
   )
+  const shown = startedSort ? sortByStarted(matching, startedSort) : matching
   // Ended at its scheduled end, even if the server has not swept it closed yet (up to 15 s).
   const isOpen =
     snapshot.data === undefined
@@ -227,10 +243,11 @@ function Monitor({ classId, sessionId }: { classId: number; sessionId: number })
         </p>
       )}
 
-      <section aria-label="Totals" className="grid grid-cols-3 gap-3">
+      <section aria-label="Totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Online" value={`${counts.online} of ${counts.total}`} />
         <Stat label="Ran code" value={String(counts.ran)} />
         <Stat label="Submitted" value={String(counts.submitted)} />
+        <Stat label="Started" value={`${counts.started} of ${counts.total}`} />
       </section>
 
       <Tabs
@@ -273,7 +290,9 @@ function Monitor({ classId, sessionId }: { classId: number; sessionId: number })
                     ? counts.offline
                     : f.id === 'errors'
                       ? counts.errors
-                      : counts.notSubmitted
+                      : f.id === 'notstarted'
+                        ? counts.notStarted
+                        : counts.notSubmitted
               const active = filter === f.id
               return (
                 <button
@@ -310,6 +329,7 @@ function Monitor({ classId, sessionId }: { classId: number; sessionId: number })
               <thead>
                 <tr>
                   <Th>Student</Th>
+                  <StartedTh sort={startedSort} onSort={setStartedSort} />
                   <Th>Last run</Th>
                   <Th>Tests</Th>
                   <Th>Last save</Th>
@@ -465,6 +485,9 @@ function StudentRow({
           </div>
         </div>
       </Td>
+      <Td className="whitespace-nowrap">
+        <StartedCell s={s} now={now} />
+      </Td>
       <Td>
         <LastRunCell run={s.last_run} now={now} />
       </Td>
@@ -502,5 +525,63 @@ function StudentRow({
         </div>
       </Td>
     </tr>
+  )
+}
+
+/** "8:03 AM" today; with the date for an older session. */
+const startTime = (iso: string, now: number) =>
+  isToday(iso, now) ? formatTimeOfDay(iso) : formatDateTime(iso)
+
+/**
+ * When the student started working in this session (first opened their workspace while it was open), and when
+ * they first opened each activity: "Lab 3 — 8:05 AM" on hover, and listed under a disclosure.
+ */
+function StartedCell({ s, now }: { s: StudentMonitor; now: number }) {
+  if (!s.started_at) return <span className="text-ink-muted">Not started</span>
+  const starts = s.activity_starts ?? []
+  const lines = starts.map((a) => `${a.title} — ${startTime(a.started_at, now)}`)
+  return (
+    <div title={lines.length > 0 ? lines.join('\n') : undefined}>
+      <time dateTime={s.started_at} className="font-medium">
+        {startTime(s.started_at, now)}
+      </time>
+      {lines.length > 0 && (
+        // Its own clicks stay here: the rest of the row opens the student's workspace.
+        <details className="text-xs text-ink-muted" onClick={(e) => e.stopPropagation()}>
+          <summary className="cursor-pointer select-none">
+            {lines.length} {lines.length === 1 ? 'activity' : 'activities'}
+          </summary>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  )
+}
+
+/** The Started column's heading: sorts earliest first, then latest first (those not started stay last). */
+function StartedTh({
+  sort,
+  onSort,
+}: {
+  sort: StartedSort | null
+  onSort: (next: StartedSort) => void
+}) {
+  const Icon = sort === null ? ArrowUpDown : sort === 'earliest' ? ArrowUp : ArrowDown
+  return (
+    <Th aria-sort={sort === null ? 'none' : sort === 'earliest' ? 'ascending' : 'descending'}>
+      <button
+        type="button"
+        onClick={() => onSort(sort === 'earliest' ? 'latest' : 'earliest')}
+        title={sort === 'earliest' ? 'Latest first' : 'Earliest first'}
+        className="inline-flex items-center gap-1 tracking-wide uppercase hover:text-ink"
+      >
+        Started
+        <Icon aria-hidden className={`size-3 ${sort === null ? 'opacity-60' : 'text-ink'}`} />
+      </button>
+    </Th>
   )
 }

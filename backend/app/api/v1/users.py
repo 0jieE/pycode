@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from app.schemas.user import (
     ImportResult,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    UserCounts,
     UserCreate,
     UserOut,
     UserUpdate,
@@ -23,13 +24,14 @@ admin_only = require_role(Role.ADMIN)
 
 @router.get("", response_model=Page[UserOut])
 def list_users(
-    role: Optional[Role] = None,
+    role: Optional[Literal["instructor", "student"]] = None,
     q: Optional[str] = Query(None, max_length=100),
     params: PageParams = Depends(pagination),
     _: User = Depends(admin_only),
     db: Session = Depends(get_db),
 ) -> Page[UserOut]:
-    items, total = user_service.list_users(db, role, q, params.offset, params.size)
+    """Instructors and students (never the administrator). ?role= instructor | student."""
+    items, total = user_service.list_users(db, Role(role) if role else None, q, params.offset, params.size)
     return Page[UserOut](
         items=[UserOut.model_validate(u) for u in items], total=total, page=params.page, size=params.size
     )
@@ -40,6 +42,12 @@ def create_user(
     body: UserCreate, request: Request, actor: User = Depends(admin_only), db: Session = Depends(get_db)
 ) -> User:
     return user_service.create_user(db, body, actor.id, client_ip(request))
+
+
+@router.get("/counts", response_model=UserCounts)
+def user_counts(_: User = Depends(admin_only), db: Session = Depends(get_db)) -> UserCounts:
+    """How many instructors and students there are (the administrator is not counted)."""
+    return UserCounts(**user_service.user_counts(db))
 
 
 # Declared before /{user_id} routes so "import" is never parsed as an id.

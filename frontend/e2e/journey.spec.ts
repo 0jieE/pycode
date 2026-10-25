@@ -5,7 +5,7 @@ import { createRoom, manilaInput, roomName } from './lab'
 /**
  * The whole course of a lab, start to finish, with real people in separate browsers and nothing
  * done behind the UI's back:
- *   1. the admin signs in and creates a student account,
+ *   1. the admin generates a registration code and the student signs up with it,
  *   2. the instructor makes a class and an invite code; that student joins, the instructor approves,
  *   3. the instructor opens a session and publishes an activity; the student sees the folder,
  *   4. the student edits, saves, runs (output appears) and submits,
@@ -43,20 +43,37 @@ test.beforeAll(async ({ browser }) => {
   stu = await open()
 })
 
-test('1. the admin signs in and creates a student account', async () => {
+test('1. the admin generates a code and the student signs up with it', async () => {
   const a = account('admin')
   await signIn(admin, a.username, a.password)
-  await expect(admin.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
+  await expect(admin.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
 
-  await admin.getByRole('button', { name: 'New user' }).click()
-  const dialog = admin.getByRole('dialog', { name: 'Create user' })
-  await dialog.getByLabel('Full name').fill('Journey Student')
-  await dialog.getByLabel('Username').fill(STUDENT_USERNAME)
-  await dialog.getByLabel('Student number').fill(`J-${run}`)
-  await dialog.getByLabel('Temporary password').fill(STUDENT_PASSWORD)
-  await dialog.getByRole('button', { name: 'Create user' }).click()
-  await expect(admin.getByText('User created')).toBeVisible()
+  // Students make their own account with a registration code from the administrator.
+  await admin.goto('/admin/registration-codes')
+  await admin.getByRole('button', { name: 'Generate codes' }).first().click()
+  const generate = admin.getByRole('dialog', { name: 'Generate registration codes' })
+  await generate.getByRole('tab', { name: 'Single' }).click()
+  await generate.getByLabel('Batch name').fill(`Journey ${run}`)
+  await generate.getByRole('button', { name: 'Generate code' }).click()
+  const result = admin.getByRole('dialog', { name: 'Your registration codes' })
+  const code = (
+    await result.getByRole('list', { name: 'Registration codes' }).getByRole('listitem').innerText()
+  ).trim()
+  await result.getByRole('button', { name: 'Done' }).click()
 
+  await stu.goto('/signup')
+  await stu.getByLabel('Registration code').fill(code)
+  await stu.getByLabel('Student number').fill(`J-${run}`)
+  await stu.getByLabel('Full name').fill('Journey Student')
+  await stu.getByLabel('Username').fill(STUDENT_USERNAME)
+  await stu.getByLabel('Password', { exact: true }).fill(STUDENT_PASSWORD)
+  await stu.getByLabel('Confirm password').fill(STUDENT_PASSWORD)
+  await stu.getByRole('button', { name: 'Create account' }).click()
+  await expect(stu).toHaveURL(/\/my\/classes$/)
+  // Signed in by the sign-up; step 2 signs in again the usual way.
+  await stu.context().clearCookies()
+
+  await admin.goto('/admin/users/students')
   await admin.getByLabel('Search').fill(STUDENT_USERNAME)
   await expect(admin.getByRole('row', { name: new RegExp(STUDENT_USERNAME) })).toBeVisible()
 })

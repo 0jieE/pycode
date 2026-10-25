@@ -1,10 +1,9 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../client'
 import type {
-  ImportResult,
   ResetPasswordResponse,
-  Role,
   User,
+  UserCounts,
   UserCreate,
   UserPage,
   UserUpdate,
@@ -16,7 +15,8 @@ export interface UserListParams {
   page: number
   size: number
   q: string
-  role: Role | ''
+  /** '' = everyone the administrator manages. */
+  role: 'instructor' | 'student' | ''
 }
 
 export function useUsers(params: UserListParams) {
@@ -59,15 +59,10 @@ export function useResetPassword() {
   })
 }
 
-export function useImportUsers() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (file: File) => {
-      const body = new FormData()
-      body.append('file', file)
-      return api.post<ImportResult>('/users/import', { body })
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: usersKey }),
-    meta: { silent: true },
+/** How many instructors and students there are (for the side bar; the administrator is not counted). */
+export function useUserCounts() {
+  return useQuery({
+    queryKey: [...usersKey, 'counts'],
+    queryFn: ({ signal }) => api.get<UserCounts>('/users/counts', { signal }),
   })
 }

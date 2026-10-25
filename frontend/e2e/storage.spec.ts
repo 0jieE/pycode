@@ -33,7 +33,7 @@ test.beforeAll(async ({ browser }) => {
   await page.getByLabel('Username').fill(ADMIN.username)
   await page.getByLabel('Password').fill(ADMIN.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
   const found = await page.request.get(`/api/v1/users?q=${STUDENT.username}&size=5`)
   const me = (
     (await found.json()).items as { id: number; username: string; full_name: string }[]

@@ -95,8 +95,8 @@ volume predates it, see `mysql/init/01-test-db.sh`). Tests use Redis database 1;
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/login` (httpOnly cookie) · `POST /auth/logout` · `GET /auth/me` · `POST /auth/register` (public student sign-up, below) · `PATCH /auth/me` and `POST /auth/change-password` (every role: my own account, below) |
-| Admin | `GET/POST /users` · `PATCH /users/{id}` · `POST /users/{id}/reset-password` · `POST /users/import` (CSV: `student_no,full_name,username,temp_password`) · registration codes: `POST/GET /registration-codes`, `GET /registration-codes/batches`, `DELETE /registration-codes/{id}`, `DELETE /registration-codes?batch=NAME` |
+| Auth | `POST /auth/login` (httpOnly cookie) · `POST /auth/logout` · `GET /auth/me` · `POST /auth/register` (public student sign-up, below) · `PATCH /auth/me` and `POST /auth/change-password` (every role: my own account, below) · `GET/PATCH /me` and `POST /me/change-password` (the same, every role) |
+| Admin | `GET/POST /users` · `GET /users/counts` · `PATCH /users/{id}` · `POST /users/{id}/reset-password` · `POST /users/import` (CSV: `student_no,full_name,username,temp_password`) · registration codes: `POST/GET /registration-codes`, `GET /registration-codes/batches`, `DELETE /registration-codes/{id}`, `DELETE /registration-codes?batch=NAME` |
 | Instructor | classes, invite codes, enrollments (approve/reject/remove), lab sessions (open/close), activities (publish), submissions, read-only student workspaces, `GET /sessions/{id}/monitor`, and the **automatic test cases**: `GET/POST /activities/{id}/test-cases` · `PATCH /activities/{id}/test-cases/order` · `PATCH/DELETE /test-cases/{id}` · `POST /test-cases/{id}/try` · `POST /activities/{id}/regrade` (below) |
 | Student | `POST /enroll`, `GET /my/classes`, workspace tree/files/versions, `POST /workspace/{class_id}/run` (`mode`: interactive or batch, below), `GET /executions/{id}`, `POST /activities/{id}/submit`, `GET /classes/{class_id}/my-submissions` (my latest submission per activity: `[{activity_id, status, submitted_at}]`, approved students only, not paginated), `GET /activities/{id}/test-cases/student` (the test cases a student may see), `POST /workspace/{class_id}/test` (the **Test** button: run the activity's test cases), and the personal **Practice** workspace `/practice/*` (below; instructors have one too) |
 
@@ -126,6 +126,31 @@ file, 2 MB per workspace, 100 files.
   empty. Submissions are frozen copies and are not touched. Returns `{workspace_id, class_id, files_deleted,
   bytes_deleted, starter_files_restored}`; audited as `workspace_clear`. Cannot be undone. A student with a file open
   gets `404 FILE_NOT_FOUND` on the next save (nothing is announced to the class).
+
+### One administrator
+
+The system has **exactly one administrator account**, created by the first setup (`python -m app.seed`, as
+`admin`, with a random password printed once).
+
+* The users API never creates or produces another one: `POST /users` and `PATCH /users/{id}` with `role: "admin"`,
+  and a CSV import whose optional `role` column says `admin` anywhere (the whole file), answer
+  **`403 ADMIN_ROLE_RESERVED`**. No account's role can change at all (`400 ROLE_CHANGE_NOT_ALLOWED`); a CSV `role`
+  other than `student` skips that row.
+* The administrator account cannot be changed, deactivated, demoted or have its password reset through `/users`:
+  **`409 ADMIN_PROTECTED`** ("The administrator account cannot be changed, deactivated or demoted here. The
+  administrator changes its own name and password under My account."). No account can be deleted (there is no
+  delete endpoint).
+* `GET /users` lists instructors and students only (never the administrator); `?role=` accepts `instructor` or
+  `student` (`admin` is `422`). `GET /users/counts` -> `{instructors, students}`.
+* The administrator manages its own account like everyone else: **`GET /me`**, **`PATCH /me`** `{full_name}`
+  (unknown fields are `422`) and **`POST /me/change-password`** `{current_password, new_password}` (the same rules as
+  `/auth/change-password`, below). These work for every role, also while a temporary password must be changed.
+* **Recovery** (lost admin password), on the server: `docker compose exec api python -m app.reset_admin` prints a new
+  temporary password, sets `must_change_password`, re-enables the account and signs it out everywhere. The audit log
+  records `admin_password_reset` (no user: it was done on the server; never the password).
+* The database enforces it too: a generated column `users.admin_flag` (1 for the admin, NULL for everyone else) has a
+  unique key, so MySQL itself refuses a second administrator. Migration 0019 stops with a clear message if a database
+  already has more than one.
 
 ### My own account (admin, instructor and student)
 
@@ -447,6 +472,17 @@ or stream `/ws/run/{id}`; an execution has `practice: true` and `class_id: null`
 * Files of the two kinds never mix: a practice file id is `404` on `/workspace/*` and a class file id is `404` on
   `/practice/*`.
 
+**When students start.** The first time a student reaches their class workspace (`GET /workspace/{class_id}/tree`,
+or a file opened) while the class has an OPEN lab session, `session_starts` records `started_at` for that session and
+student; the first time they open a file inside an activity's folder, `session_activity_starts` records that
+activity's start (and the session start's `first_activity_id`, if not set yet). Both are written once (a unique key and
+`INSERT IGNORE`): reloads change nothing, a closed session records nothing, each session has its own rows. The client
+sends no session id: the server finds the open session. Instructors viewing a student's workspace and Practice record
+nothing. `GET /sessions/{id}/monitor` gives each student `started_at`, `first_activity_id` and `activity_starts:
+[{activity_id, title, started_at}]` (oldest first); the monitor feed gets `{"type":"started", student_id, student,
+ts, started_at}` and, per activity, the same plus `activity_id`, `activity` (title). A recording failure is logged and
+never breaks the student's request.
+
 **Lab sessions follow their schedule** (Celery beat, every 15 s; events and audit rows have no user):
 
 * **They open themselves at `starts_at`** (event `session_opened` with `"reason": "scheduled_start"`), but only a
@@ -479,7 +515,7 @@ Before closing for an error the server sends `{"type":"error","code":"...","deta
 |---|---|---|
 | `/ws/run/{execution_id}` | the student who started the run (or the instructor who started a test-case "try") | `{"type":"status"}`, `{"type":"output","data":"..."}`, `{"type":"input_request"}` (interactive runs, which also accept `stdin` / `eof` / `stop` from the client: see Interactive input), `{"type":"done","status","exit_code","duration_ms"}`. A run that already finished is replayed immediately. If `done` carries an `output` field it is the complete output: use it. Test jobs send `test_result` messages and a `done` with `kind:"test"` and the totals (see Automatic grading). |
 | `/ws/class/{class_id}` | approved students and the class's instructor | `session_opened`, `session_closed`, `activity_published`. **Students must send any text (e.g. `{"type":"ping"}`) at least every 30 s**: it is their presence heartbeat, answered with `{"type":"pong"}`. |
-| `/ws/monitor/{lab_session_id}` | the instructor who owns the session | `run`, `run_done`, `tested`, `saved`, `submitted`, `online`, `offline` (with `student_id`, `student`, `ts`; never student code). Pair with `GET /sessions/{id}/monitor` for the full picture. |
+| `/ws/monitor/{lab_session_id}` | the instructor who owns the session | `run`, `run_done`, `tested`, `saved`, `submitted`, `online`, `offline`, `started` (with `student_id`, `student`, `ts`; never student code). Pair with `GET /sessions/{id}/monitor` for the full picture. |
 
 Open sockets re-check their user every 20 s, so signing in on another PC or being removed from a class closes them.
 
@@ -489,11 +525,12 @@ Target: Ubuntu Server 22.04+, 8 cores, 16 GB RAM, a **static IP**, only **port 8
 
 ```bash
 # once: Docker Engine + compose plugin, then
-git clone <repo> && cd backend            # or copy the folder
-cp .env.example .env && nano .env         # real passwords, SECRET_KEY, NGINX_PORT=80, COOKIE_SECURE=false (plain HTTP on the LAN)
+git clone https://github.com/0jieE/pycode.git && cd pycode/backend
+cp .env.example .env && nano .env         # ENV=prod, real passwords, SECRET_KEY, NGINX_PORT=80, COOKIE_SECURE=false (plain HTTP on the LAN)
 docker build -t lab-python-runner:1 sandbox-image/
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-docker compose exec api python -m app.seed      # first install only; then create real accounts in the admin API
+docker compose exec api python -m app.seed      # first install only: the one admin (password printed once) + samples
+docker compose exec api python -m app.reset_admin   # only if the admin password is ever lost
 ```
 
 `docker-compose.prod.yml` swaps the dev server for gunicorn (4 uvicorn workers), runs migrations on start and takes

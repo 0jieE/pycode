@@ -90,7 +90,7 @@ export function applyMonitorEvent(students: StudentMonitor[], event: MonitorEven
   if (typeof id !== 'number') return { students, unknownStudent: false }
   const index = students.findIndex((s) => s.student.id === id)
   if (index === -1) {
-    const known = ['run', 'run_done', 'saved', 'submitted', 'online', 'offline']
+    const known = ['run', 'run_done', 'saved', 'submitted', 'online', 'offline', 'started']
     return { students, unknownStudent: known.includes(event.type) }
   }
 
@@ -146,9 +146,57 @@ function updateStudent(s: StudentMonitor, e: MonitorEvent): StudentMonitor {
       return ts ? { ...s, last_save: ts } : s
     case 'submitted':
       return { ...s, submitted: true, last_submitted_at: ts ?? s.last_submitted_at }
+    case 'started':
+      return applyStarted(s, e)
     default:
       return s
   }
+}
+
+/**
+ * {"type":"started"}: the student began working in this session (`started_at`), or opened an activity for the
+ * first time (`activity_id` and `activity`, its title, too). Each is announced once; the first time stays.
+ */
+function applyStarted(s: StudentMonitor, e: MonitorEvent): StudentMonitor {
+  const at =
+    typeof e.started_at === 'string' ? e.started_at : typeof e.ts === 'string' ? e.ts : null
+  if (!at) return s
+  const activityId = typeof e.activity_id === 'number' ? e.activity_id : null
+  const starts = s.activity_starts ?? []
+  const newActivity = activityId !== null && !starts.some((a) => a.activity_id === activityId)
+  const newSession = !s.started_at
+  if (!newActivity && !newSession) return s
+  return {
+    ...s,
+    started_at: s.started_at ?? at,
+    first_activity_id: s.first_activity_id ?? activityId,
+    activity_starts: newActivity
+      ? [
+          ...starts,
+          {
+            activity_id: activityId,
+            title: typeof e.activity === 'string' ? e.activity : 'Activity',
+            started_at: at,
+          },
+        ]
+      : starts,
+  }
+}
+
+/** The student has started working in this session (opened their workspace while it was open). */
+export const hasStarted = (s: StudentMonitor): boolean => Boolean(s.started_at)
+
+export type StartedSort = 'earliest' | 'latest'
+
+/** By when they started, earliest or latest first; those who have not started are always last. */
+export function sortByStarted(students: StudentMonitor[], order: StartedSort): StudentMonitor[] {
+  const time = (s: StudentMonitor) => (s.started_at ? Date.parse(s.started_at) : null)
+  return students.slice().sort((a, b) => {
+    const ta = time(a)
+    const tb = time(b)
+    if (ta === null || tb === null) return ta === null ? (tb === null ? 0 : 1) : -1
+    return order === 'earliest' ? ta - tb : tb - ta
+  })
 }
 
 export interface MonitorCounts {
@@ -157,26 +205,32 @@ export interface MonitorCounts {
   /** Students whose last run is known (they have run code this session). */
   ran: number
   submitted: number
+  /** Students who have started working in this session. */
+  started: number
   offline: number
   errors: number
   notSubmitted: number
+  notStarted: number
 }
 
 export function monitorCounts(students: StudentMonitor[]): MonitorCounts {
   const online = students.filter((s) => s.online).length
   const submitted = students.filter((s) => s.submitted).length
+  const started = students.filter(hasStarted).length
   return {
     total: students.length,
     online,
     ran: students.filter((s) => s.last_run !== null).length,
     submitted,
+    started,
     offline: students.length - online,
     errors: students.filter(hasRunError).length,
     notSubmitted: students.length - submitted,
+    notStarted: students.length - started,
   }
 }
 
-export type MonitorFilter = 'all' | 'offline' | 'errors' | 'unsubmitted'
+export type MonitorFilter = 'all' | 'offline' | 'errors' | 'unsubmitted' | 'notstarted'
 
 export function filterStudents(
   students: StudentMonitor[],
@@ -189,6 +243,8 @@ export function filterStudents(
       return students.filter(hasRunError)
     case 'unsubmitted':
       return students.filter((s) => !s.submitted)
+    case 'notstarted':
+      return students.filter((s) => !hasStarted(s))
     default:
       return students
   }

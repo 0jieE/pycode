@@ -10,7 +10,7 @@ import re
 import sys
 from typing import Optional
 
-from sqlalchemy import Column, Enum, Table
+from sqlalchemy import Column, Computed, Enum, Table
 from sqlalchemy.dialects import mysql
 
 import app.models  # noqa: F401  (registers every table on Base.metadata)
@@ -19,7 +19,8 @@ from app.core.database import Base
 # Tables shown together in dbdiagram.io (purely visual).
 GROUPS = {
     "Accounts_and_access": ["users", "registration_codes", "activity_logs", "storage_limits"],
-    "Classes_and_labs": ["classes", "invite_codes", "enrollments", "lab_sessions", "activities", "test_cases"],
+    "Classes_and_labs": ["classes", "invite_codes", "enrollments", "lab_sessions", "session_starts",
+                         "session_activity_starts", "activities", "test_cases"],
     "Files_and_workspaces": ["workspaces", "workspace_files", "file_versions"],
     "Work_and_runs": ["submissions", "submission_files", "executions"],
     "Labs_and_sign_ins": ["labs", "login_events"],
@@ -42,6 +43,8 @@ TABLE_NOTES = {
     "tutorial_lessons": "The built-in Python tutorial. Loaded from content/tutorial/*.md (python -m app.tutorial_content), editable afterwards; Reset to default reloads the file.",
     "tutorial_progress": "One row per student and lesson: first view, first all-pass, number of checks, autosaved code.",
     "labs": "A computer lab: a named room. Lab sessions book it (no two sessions of a lab may overlap).",
+    "session_starts": "When a student started in a lab session: their first class-workspace access (file tree or a file opened) while it was open. Written once.",
+    "session_activity_starts": "When a student first opened a file inside an activity folder during a lab session.",
     "lab_sessions": "A weekly lab meeting of a class in a lab. It opens itself at starts_at and closes itself at ends_at (Celery beat, every 15 s); the instructor may open it from 15 minutes before and close it any time.",
     "login_events": "Every sign-in, with the lab session of the student (if one of their classes had one open) and its outcome: success, or replaced_other_session when it signed another session of the account out. Addresses are in the audit log only.",
     "executions": "Every Run, test and grading job (kind). lab_session_id and activity_id are NULL for Practice runs; workspace_id is NULL for an instructor trying a test case.",
@@ -82,6 +85,8 @@ COLUMN_NOTES = {
     ("users", "storage_max_workspace_bytes"): "own limit of this user, per workspace; NULL = the limit of the role (storage_limits)",
     ("users", "storage_max_files"): "own limit of this user, per workspace; NULL = the limit of the role (storage_limits)",
     ("storage_limits", "updated_by"): "the admin who last changed them",
+    ("session_starts", "first_activity_id"): "the first activity they opened a file of in that session; NULL until they do",
+    ("users", "admin_flag"): "generated: 1 for the administrator, NULL for everyone else; its unique key allows only one administrator",
     ("test_cases", "require_input_read"): "with stdin: the case passes only if the program read every input line (counted by the sandbox, outside the program)",
     ("activities", "requirements"): "code requirements checked with ast before the tests run: must_define_functions, must_use, must_not_use_calls, must_not_use_imports; NULL = none",
     ("submissions", "hardcode_suspected"): "set by grading: a string literal in the code holds an expected-output line of a hidden case (instructor only, no automatic fail)",
@@ -107,7 +112,7 @@ def type_of(table: Table, column: Column) -> str:
 
 
 def default_of(column: Column) -> Optional[str]:
-    if column.server_default is None:
+    if column.server_default is None or isinstance(column.server_default, Computed):  # generated: see its note
         return None
     raw = str(column.server_default.arg.text if hasattr(column.server_default.arg, "text") else column.server_default.arg)
     raw = raw.strip("'")

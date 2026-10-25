@@ -137,7 +137,7 @@ test('5. a save shows up on the monitor by itself, without reloading anything', 
 }) => {
   // Student 13 has never saved: their "last save" starts as a dash. They save through the API
   // (a student's API call is the same event as a click in the editor).
-  const cell = row(ins, 'Student 13').getByRole('cell').nth(3)
+  const cell = row(ins, 'Student 13').getByRole('cell').nth(4)
   await expect(cell).toHaveText('—')
 
   let snapshotReloads = 0
@@ -170,14 +170,14 @@ test('5. a save shows up on the monitor by itself, without reloading anything', 
   await stu.keyboard.press('Control+End')
   await stu.keyboard.type('\n# monitored save')
   await expect(stu.getByText('All changes saved')).toBeVisible({ timeout: 10_000 })
-  await expect(row(ins, 'Student 12').getByRole('cell').nth(3)).toHaveText(/just now|min ago/)
+  await expect(row(ins, 'Student 12').getByRole('cell').nth(4)).toHaveText(/just now|min ago/)
 })
 
 test('6. running code shows the result on the monitor', async () => {
   await stu.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(stu.getByText(/Finished in \d+ ms/)).toBeVisible({ timeout: 25_000 })
 
-  const cell = row(ins, 'Student 12').getByRole('cell').nth(1)
+  const cell = row(ins, 'Student 12').getByRole('cell').nth(2)
   await expect(cell).toContainText('OK', { timeout: 5000 })
   await expect(cell).toContainText('main.py')
   await expect(TOTALS(ins)).toContainText('Ran code')
@@ -190,7 +190,7 @@ test('7. a crash lands under "Has errors"; "Not submitted" and "Offline" filter 
   await stu.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(stu.getByText('Exited with code 1')).toBeVisible({ timeout: 25_000 })
 
-  await expect(row(ins, 'Student 12').getByRole('cell').nth(1)).toContainText('Error', {
+  await expect(row(ins, 'Student 12').getByRole('cell').nth(2)).toContainText('Error', {
     timeout: 5000,
   })
 

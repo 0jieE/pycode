@@ -51,8 +51,10 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Role changes are not allowed after creation (would leave enrollments/classes dangling)."""
+    """Role changes are not allowed after creation (would leave enrollments/classes dangling): `role` is accepted only
+    to refuse it clearly (admin: 403 ADMIN_ROLE_RESERVED, another role: 400 ROLE_CHANGE_NOT_ALLOWED)."""
 
+    role: Optional[Role] = None
     full_name: Optional[str] = Field(default=None, min_length=1, max_length=150)
     student_no: Optional[str] = Field(default=None, min_length=1, max_length=32)
     is_active: Optional[bool] = None
@@ -77,3 +79,18 @@ class ImportResult(BaseModel):
     created: int
     skipped: int
     errors: list[ImportRowError]
+
+
+class UserCounts(BaseModel):
+    """GET /users/counts: the accounts the admin manages (the administrator itself is not counted)."""
+
+    instructors: int
+    students: int
+
+
+class MyNameUpdate(BaseModel):
+    """PATCH /me: my own full name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=1, max_length=150)

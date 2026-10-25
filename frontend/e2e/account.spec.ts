@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { account } from './accounts'
 
 /**
- * Account settings for every role, and the forced password change after an admin reset. The users are made
+ * My account for every role, and the forced password change after an admin reset. The users are made
  * through the API (so each run has its own); everything the users do goes through the UI.
  */
 
@@ -64,10 +64,11 @@ test.beforeAll(async ({ browser, playwright, baseURL }) => {
   await expect(student.getByRole('heading', { name: 'My classes', level: 1 })).toBeVisible()
 })
 
-test('1. the account page opens from the avatar, and shows what only an administrator can change', async () => {
-  await student.getByRole('link', { name: 'Account settings' }).click()
+test('1. My account opens from the account menu, and shows what only an administrator can change', async () => {
+  await student.getByRole('button', { name: /^Account menu/ }).click()
+  await student.getByRole('menuitem', { name: 'My account' }).click()
   await expect(student).toHaveURL(/\/account$/)
-  await expect(student.getByRole('heading', { name: 'Account settings', level: 1 })).toBeVisible()
+  await expect(student.getByRole('heading', { name: 'My account', level: 1 })).toBeVisible()
 
   await expect(student.getByLabel('Full name')).toHaveValue('Account Student')
   await expect(student.getByLabel('Username')).toHaveValue(USERNAME)
@@ -155,7 +156,7 @@ test('3. changing the password: checks, the wrong current password, success, and
   await expect(student.getByText('Password changed. Other devices were signed out.')).toBeVisible()
   await expect(current).toHaveValue('')
   await student.reload()
-  await expect(student.getByRole('heading', { name: 'Account settings', level: 1 })).toBeVisible()
+  await expect(student.getByRole('heading', { name: 'My account', level: 1 })).toBeVisible()
 
   // The old password no longer works; the new one does.
   const other = await (await browser.newContext()).newPage()
@@ -205,11 +206,9 @@ test('5. instructors and administrators have the page too', async ({ browser }) 
   const ins = await (await browser.newContext({ viewport: { width: 1366, height: 768 } })).newPage()
   await signIn(ins, instructorName, PASSWORD)
   await expect(ins.getByRole('heading', { name: 'Classes', level: 1 })).toBeVisible()
-  await ins
-    .getByRole('banner')
-    .getByRole('link', { name: /Account Instructor/ })
-    .click()
-  await expect(ins.getByRole('heading', { name: 'Account settings', level: 1 })).toBeVisible()
+  await ins.getByRole('button', { name: /^Account menu: Account Instructor/ }).click()
+  await ins.getByRole('menuitem', { name: 'My account' }).click()
+  await expect(ins.getByRole('heading', { name: 'My account', level: 1 })).toBeVisible()
   await expect(
     ins.getByRole('region', { name: 'Profile' }).getByText('Instructor', { exact: true }),
   ).toBeVisible()
@@ -220,9 +219,10 @@ test('5. instructors and administrators have the page too', async ({ browser }) 
     await browser.newContext({ viewport: { width: 1366, height: 768 } })
   ).newPage()
   await signIn(admin, adminUser.username, adminUser.password)
-  await expect(admin.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
-  await admin.getByRole('link', { name: /System Administrator/ }).click()
-  await expect(admin.getByRole('heading', { name: 'Account settings', level: 1 })).toBeVisible()
+  await expect(admin.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
+  await admin.getByRole('button', { name: /^Account menu: System Administrator/ }).click()
+  await admin.getByRole('menuitem', { name: 'My account' }).click()
+  await expect(admin.getByRole('heading', { name: 'My account', level: 1 })).toBeVisible()
   await expect(
     admin.getByRole('region', { name: 'Profile' }).getByText('Administrator', { exact: true }),
   ).toBeVisible()

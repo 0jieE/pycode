@@ -1,7 +1,7 @@
 """Live monitoring: events for the instructor's monitor, student presence, and the monitor snapshot.
 
 Events go to Redis channel `monitor:{lab_session_id}` as
-  {"type": "run"|"run_done"|"saved"|"submitted"|"online"|"offline", "student_id", "student", "ts", ...}
+  {"type": "run"|"run_done"|"saved"|"submitted"|"online"|"offline"|"started", "student_id", "student", "ts", ...}
 Presence is a Redis sorted set `online:{class_id}` (member = student id, score = last heartbeat time).
 """
 import logging
@@ -20,11 +20,12 @@ from app.models.activity import Activity
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.execution import Execution, ExecutionKind, ExecutionStatus
 from app.models.lab_session import LabSession
+from app.models.session_start import SessionActivityStart, SessionStart
 from app.models.submission import Submission
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceFile
 from app.schemas.enrollment import StudentBrief
-from app.schemas.monitor import LastRun, LastTest, MonitorSnapshot, StudentMonitor
+from app.schemas.monitor import ActivityStart, LastRun, LastTest, MonitorSnapshot, StudentMonitor
 from app.services import class_service, grading_service, session_service
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,15 @@ def snapshot(db: Session, instructor: User, session_id: int) -> MonitorSnapshot:
         .where(Activity.class_id == session.class_id, Submission.submitted_at >= since)
         .group_by(Submission.student_id)).all())
 
+    starts = {s.student_id: s for s in db.scalars(select(SessionStart).where(SessionStart.lab_session_id == session.id))}
+    activity_starts: dict[int, list[ActivityStart]] = {}
+    for row, title in db.execute(
+            select(SessionActivityStart, Activity.title).join(Activity, Activity.id == SessionActivityStart.activity_id)
+            .where(SessionActivityStart.lab_session_id == session.id)
+            .order_by(SessionActivityStart.started_at, SessionActivityStart.id)):
+        activity_starts.setdefault(row.student_id, []).append(
+            ActivityStart(activity_id=row.activity_id, title=title, started_at=row.started_at))
+
     online = online_ids(session.class_id)
     students = []
     for u in rows:
@@ -152,6 +162,9 @@ def snapshot(db: Session, instructor: User, session_id: int) -> MonitorSnapshot:
         students.append(StudentMonitor(
             student=StudentBrief(id=u.id, username=u.username, full_name=u.full_name, student_no=u.student_no),
             online=u.id in online,
+            started_at=starts[u.id].started_at if u.id in starts else None,
+            first_activity_id=starts[u.id].first_activity_id if u.id in starts else None,
+            activity_starts=activity_starts.get(u.id, []),
             last_run=None if run is None else LastRun(
                 execution_id=run.id, entry_path=run.entry_path, status=run.status,
                 duration_ms=run.duration_ms, queued_at=run.queued_at, finished_at=run.finished_at),

@@ -8,14 +8,16 @@ import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { SelectField } from '@/components/ui/SelectField'
 import { TextField } from '@/components/ui/TextField'
 import { toast } from '@/components/ui/toastStore'
+import type { ManagedRole } from '@/lib/adminRoutes'
 import { generatePassword } from '@/lib/password'
 
 const USERNAME_RE = /^[A-Za-z0-9._-]{3,64}$/
 
-const ROLE_OPTIONS = [
-  { value: 'student', label: 'Student' },
+// The administrator is the only admin. New accounts made here are instructors (students sign up with a
+// registration code); editing shows the account's own role, which never changes.
+const ROLE_OPTIONS: { value: ManagedRole; label: string }[] = [
   { value: 'instructor', label: 'Instructor' },
-  { value: 'admin', label: 'Administrator' },
+  { value: 'student', label: 'Student' },
 ]
 
 interface FieldErrors {
@@ -33,8 +35,9 @@ interface UserFormDialogProps {
 }
 
 export function UserFormDialog({ open, user, onClose }: UserFormDialogProps) {
+  const title = user ? 'Edit user' : 'New instructor'
   return (
-    <Dialog open={open} onClose={onClose} title={user ? 'Edit user' : 'Create user'}>
+    <Dialog open={open} onClose={onClose} title={title}>
       <UserForm user={user} onClose={onClose} />
     </Dialog>
   )
@@ -48,7 +51,7 @@ function UserForm({ user, onClose }: { user: User | null; onClose: () => void })
 
   const [fullName, setFullName] = useState(user?.full_name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
-  const [role, setRole] = useState<Role>(user?.role ?? 'student')
+  const role: Role = user?.role ?? 'instructor'
   const [studentNo, setStudentNo] = useState(user?.student_no ?? '')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -150,9 +153,8 @@ function UserForm({ user, onClose }: { user: User | null; onClose: () => void })
           <SelectField
             label="Role"
             value={role}
-            onChange={(e) => setRole(e.target.value as Role)}
-            options={ROLE_OPTIONS}
-            disabled={isEdit}
+            options={isEdit ? ROLE_OPTIONS : ROLE_OPTIONS.filter((o) => o.value === 'instructor')}
+            disabled
           />
           {showStudentNo && (
             <TextField
@@ -193,7 +195,7 @@ function UserForm({ user, onClose }: { user: User | null; onClose: () => void })
       <DialogFooter>
         <Button onClick={onClose}>Cancel</Button>
         <Button type="submit" variant="primary" loading={pending}>
-          {isEdit ? 'Save changes' : 'Create user'}
+          {isEdit ? 'Save changes' : 'Create instructor'}
         </Button>
       </DialogFooter>
     </form>

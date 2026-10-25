@@ -26,7 +26,8 @@ from app.schemas.workspace import (
     VersionOut,
 )
 from app.schemas.storage import ClearResult
-from app.services import audit_service, class_service, monitor_service, session_service, storage_service
+from app.services import (audit_service, class_service, monitor_service, session_service, start_service,
+                          storage_service)
 
 ALLOWED_EXTENSIONS = frozenset({".py", ".txt", ".csv", ".json", ".md"})
 MAX_PATH_LENGTH = 255
@@ -352,7 +353,9 @@ def _tree(db: Session, workspace: Workspace) -> TreeOut:
 
 
 def get_tree(db: Session, student: User, class_id: int) -> TreeOut:
-    return _tree(db, _member_workspace(db, student, class_id))
+    tree = _tree(db, _member_workspace(db, student, class_id))
+    start_service.record_access(db, student, class_id)          # a lab session start, the first time
+    return tree
 
 
 def get_practice_tree(db: Session, student: User) -> TreeOut:
@@ -360,8 +363,11 @@ def get_practice_tree(db: Session, student: User) -> TreeOut:
 
 
 def get_file(db: Session, student: User, file_id: int, practice: bool = False) -> FileOut:
-    file, _ = _owned_file(db, student, file_id, practice)
-    return FileOut.model_validate(file)
+    file, workspace = _owned_file(db, student, file_id, practice)
+    out = FileOut.model_validate(file)
+    if workspace.class_id is not None:    # a class file: a session start, and the start of its activity
+        start_service.record_access(db, student, workspace.class_id, file.path)
+    return out
 
 
 def instructor_tree(db: Session, instructor: User, class_id: int, student_id: int) -> TreeOut:

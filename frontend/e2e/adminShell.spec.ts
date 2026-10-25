@@ -21,7 +21,7 @@ test.beforeAll(async ({ browser }) => {
   await page.getByLabel('Username').fill(a.username)
   await page.getByLabel('Password').fill(a.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
 })
 
 test('the icon strip is fixed, and the top bar says where you are', async () => {

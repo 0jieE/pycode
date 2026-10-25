@@ -287,16 +287,17 @@ def test_the_lock_applies_to_every_role_and_to_websockets(db: Session) -> None:
     login(t, "teach1", "Temporary-pw-1")
     assert t.get(f"{API}/classes").json()["code"] == "PASSWORD_CHANGE_REQUIRED"
 
-    other_admin = make_user(db, Role.ADMIN, "admin2")
-    admin.post(f"{API}/users/{other_admin.id}/reset-password", json={"new_password": "Temporary-pw-1"})
-    a2 = new_device()
-    login(a2, "admin2", "Temporary-pw-1")
-    assert a2.get(f"{API}/users").json()["code"] == "PASSWORD_CHANGE_REQUIRED"
-    assert admin.get(f"{API}/users").status_code == 200  # the admin who did the reset is not locked
 
     stu, _ = locked_student(db, admin, "stu1")
     with stu.websocket_connect(f"{API}/ws/class/1") as ws:
         assert ws.receive_json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+    # the administrator too, after (last: it signs the admin out) the recovery command gave it a temporary password
+    from app.reset_admin import reset_admin
+    _, temporary = reset_admin()
+    a2 = new_device()
+    assert login(a2, "admin1", temporary).status_code == 200
+    assert a2.get(f"{API}/users").json()["code"] == "PASSWORD_CHANGE_REQUIRED"
 
 
 def test_a_csv_import_gives_temporary_passwords(db: Session) -> None:

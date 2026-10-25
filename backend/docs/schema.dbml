@@ -99,6 +99,7 @@ Table users {
   full_name varchar(150) [not null]
   student_no varchar(32) [unique]
   role users_role [not null]
+  admin_flag smallint [note: 'generated: 1 for the administrator, NULL for everyone else; its unique key allows only one administrator']
   is_active boolean [not null, default: true]
   must_change_password boolean [not null, default: false, note: 'true after an admin reset or a CSV import: only /auth/me, change-password and logout work until the password is changed']
   preferences json [note: 'own settings of the user (theme, editor_theme); missing values mean the defaults']
@@ -313,6 +314,34 @@ Table login_events {
   Note: 'Every sign-in, with the lab session of the student (if one of their classes had one open) and its outcome: success, or replaced_other_session when it signed another session of the account out. Addresses are in the audit log only.'
 }
 
+Table session_activity_starts {
+  id bigint [pk, increment]
+  lab_session_id bigint [not null]
+  student_id bigint [not null]
+  activity_id bigint [not null]
+  started_at datetime(6) [not null]
+
+  indexes {
+    (lab_session_id, student_id, activity_id) [unique, name: 'uq_session_activity_starts']
+  }
+
+  Note: 'When a student first opened a file inside an activity folder during a lab session.'
+}
+
+Table session_starts {
+  id bigint [pk, increment]
+  lab_session_id bigint [not null]
+  student_id bigint [not null]
+  started_at datetime(6) [not null]
+  first_activity_id bigint [note: 'the first activity they opened a file of in that session; NULL until they do']
+
+  indexes {
+    (lab_session_id, student_id) [unique, name: 'uq_session_starts']
+  }
+
+  Note: 'When a student started in a lab session: their first class-workspace access (file tree or a file opened) while it was open. Written once.'
+}
+
 Table submissions {
   id bigint [pk, increment]
   activity_id bigint [not null]
@@ -427,6 +456,12 @@ Ref: executions.tutorial_lesson_id > tutorial_lessons.id [delete: set null]
 Ref: executions.workspace_id > workspaces.id
 Ref: login_events.lab_session_id > lab_sessions.id [delete: set null]
 Ref: login_events.user_id > users.id [delete: cascade]
+Ref: session_activity_starts.activity_id > activities.id [delete: cascade]
+Ref: session_activity_starts.lab_session_id > lab_sessions.id [delete: cascade]
+Ref: session_activity_starts.student_id > users.id [delete: cascade]
+Ref: session_starts.first_activity_id > activities.id [delete: set null]
+Ref: session_starts.lab_session_id > lab_sessions.id [delete: cascade]
+Ref: session_starts.student_id > users.id [delete: cascade]
 Ref: submissions.activity_id > activities.id
 Ref: submissions.student_id > users.id
 Ref: test_cases.activity_id > activities.id [delete: cascade]
@@ -446,6 +481,8 @@ TableGroup Classes_and_labs {
   invite_codes
   enrollments
   lab_sessions
+  session_starts
+  session_activity_starts
   activities
   test_cases
 }

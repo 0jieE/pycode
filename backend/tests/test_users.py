@@ -43,8 +43,8 @@ def test_admin_creates_lists_and_filters_users(admin: TestClient) -> None:
     assert body["username"] == "bob" and body["role"] == "student" and body["is_active"] is True
     assert "password" not in body and "password_hash" not in body
 
-    listing = admin.get("/api/v1/users").json()
-    assert listing["total"] == 2 and listing["page"] == 1 and len(listing["items"]) == 2
+    listing = admin.get("/api/v1/users").json()                       # the administrator is never listed
+    assert listing["total"] == 1 and listing["page"] == 1 and len(listing["items"]) == 1
     assert admin.get("/api/v1/users", params={"role": "student"}).json()["total"] == 1
     assert admin.get("/api/v1/users", params={"q": "bo"}).json()["items"][0]["username"] == "bob"
 
@@ -84,7 +84,7 @@ def test_pagination_pages(admin: TestClient) -> None:
         admin.post("/api/v1/users", json={**NEW_USER, "username": f"user{i}", "student_no": f"n{i}"})
     p1 = admin.get("/api/v1/users", params={"page": 1, "size": 4}).json()
     p2 = admin.get("/api/v1/users", params={"page": 2, "size": 4}).json()
-    assert p1["total"] == 6 and len(p1["items"]) == 4 and len(p2["items"]) == 2
+    assert p1["total"] == 5 and len(p1["items"]) == 4 and len(p2["items"]) == 1     # (not the admin)
 
 
 def test_admin_updates_user(admin: TestClient, db: Session) -> None:
@@ -118,7 +118,7 @@ def test_deactivating_kicks_the_user_and_blocks_login(admin: TestClient) -> None
 def test_admin_cannot_deactivate_self(admin: TestClient) -> None:
     my_id = admin.get("/api/v1/auth/me").json()["id"]
     r = admin.patch(f"/api/v1/users/{my_id}", json={"is_active": False})
-    assert r.status_code == 400 and r.json()["code"] == "CANNOT_MODIFY_SELF"
+    assert r.status_code == 409 and r.json()["code"] == "ADMIN_PROTECTED"
 
 
 # ---------- reset password ----------

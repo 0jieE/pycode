@@ -1,7 +1,7 @@
 import enum
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Enum, Integer, String
+from sqlalchemy import JSON, Boolean, Computed, Enum, Integer, SmallInteger, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import TABLE_OPTS, Base, TimestampMixin
@@ -19,13 +19,20 @@ def enum_values(e: type[enum.Enum]) -> list[str]:
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
-    __table_args__ = (TABLE_OPTS,)
+    __table_args__ = (
+        # Exactly one administrator: admin_flag is 1 for the admin and NULL for everyone else, and a unique key allows
+        # many NULLs but only one 1. The database itself refuses a second admin, whatever the code does.
+        UniqueConstraint("admin_flag", name="uq_users_single_admin"),
+        TABLE_OPTS,
+    )
 
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     student_no: Mapped[Optional[str]] = mapped_column(String(32), unique=True)
     role: Mapped[Role] = mapped_column(Enum(Role, values_callable=enum_values), nullable=False)
+    admin_flag: Mapped[Optional[int]] = mapped_column(
+        SmallInteger, Computed("if((`role` = 'admin'), 1, NULL)", persisted=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
     # True after an admin reset or a CSV import gave this account a temporary password: until the user changes it,
     # only /auth/me, /auth/change-password and /auth/logout work.

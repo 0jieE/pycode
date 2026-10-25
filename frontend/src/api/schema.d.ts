@@ -137,6 +137,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Me */
+        get: operations["get_me_api_v1_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Me
+         * @description Change my own full name.
+         */
+        patch: operations["update_me_api_v1_me_patch"];
+        trace?: never;
+    };
+    "/api/v1/me/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change My Password
+         * @description Change my own password (current + new). Other devices are signed out; this one gets a fresh session cookie.
+         *     Allowed while a temporary password still has to be changed.
+         */
+        post: operations["change_my_password_api_v1_me_change_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -144,11 +186,34 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Users */
+        /**
+         * List Users
+         * @description Instructors and students (never the administrator). ?role= instructor | student.
+         */
         get: operations["list_users_api_v1_users_get"];
         put?: never;
         /** Create User */
         post: operations["create_user_api_v1_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * User Counts
+         * @description How many instructors and students there are (the administrator is not counted).
+         */
+        get: operations["user_counts_api_v1_users_counts_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1552,6 +1617,15 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /** ActivityStart */
+        ActivityStart: {
+            /** Activity Id */
+            activity_id: number;
+            /** Title */
+            title: string;
+            /** Started At */
+            started_at: string;
+        };
         /**
          * ActivityUpdate
          * @description Send only what changes. `instructions: null` / `due_at: null` clear the value.
@@ -2352,6 +2426,14 @@ export interface components {
             lab_open: boolean;
         };
         /**
+         * MyNameUpdate
+         * @description PATCH /me: my own full name.
+         */
+        MyNameUpdate: {
+            /** Full Name */
+            full_name: string;
+        };
+        /**
          * MySubmissionOut
          * @description One row of the student's own submission summary (one per activity).
          */
@@ -2846,6 +2928,15 @@ export interface components {
             student: components["schemas"]["StudentBrief"];
             /** Online */
             online: boolean;
+            /** Started At */
+            started_at?: string | null;
+            /** First Activity Id */
+            first_activity_id?: number | null;
+            /**
+             * Activity Starts
+             * @default []
+             */
+            activity_starts: components["schemas"]["ActivityStart"][];
             last_run: components["schemas"]["LastRun"] | null;
             last_test: components["schemas"]["LastTest"] | null;
             /** Last Save */
@@ -3110,6 +3201,16 @@ export interface components {
             /** Max File Bytes */
             max_file_bytes: number;
         };
+        /**
+         * UserCounts
+         * @description GET /users/counts: the accounts the admin manages (the administrator itself is not counted).
+         */
+        UserCounts: {
+            /** Instructors */
+            instructors: number;
+            /** Students */
+            students: number;
+        };
         /** UserCreate */
         UserCreate: {
             /** Username */
@@ -3158,9 +3259,11 @@ export interface components {
         };
         /**
          * UserUpdate
-         * @description Role changes are not allowed after creation (would leave enrollments/classes dangling).
+         * @description Role changes are not allowed after creation (would leave enrollments/classes dangling): `role` is accepted only
+         *     to refuse it clearly (admin: 403 ADMIN_ROLE_RESERVED, another role: 400 ROLE_CHANGE_NOT_ALLOWED).
          */
         UserUpdate: {
+            role?: components["schemas"]["Role"] | null;
             /** Full Name */
             full_name?: string | null;
             /** Student No */
@@ -3448,10 +3551,94 @@ export interface operations {
             };
         };
     };
+    get_me_api_v1_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    update_me_api_v1_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyNameUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_my_password_api_v1_me_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_users_api_v1_users_get: {
         parameters: {
             query?: {
-                role?: components["schemas"]["Role"] | null;
+                role?: ("instructor" | "student") | null;
                 q?: string | null;
                 page?: number;
                 size?: number;
@@ -3511,6 +3698,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    user_counts_api_v1_users_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCounts"];
                 };
             };
         };

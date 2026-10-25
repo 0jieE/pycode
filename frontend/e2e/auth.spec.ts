@@ -9,7 +9,7 @@ async function signIn(page: Page, username: string, password?: string) {
 }
 
 const HOMES = [
-  { username: 'admin', path: '/admin/users', heading: 'Users' },
+  { username: 'admin', path: '/admin/users/students', heading: 'Students' },
   { username: 'instructor1', path: '/classes', heading: 'Classes' },
   { username: 'student01', path: '/my/classes', heading: 'My classes' },
 ]

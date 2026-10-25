@@ -27,7 +27,7 @@ export function useAuth(): AuthState {
 }
 
 export const HOME_BY_ROLE: Record<Role, string> = {
-  admin: '/admin/users',
+  admin: '/admin/users/students',
   instructor: '/classes',
   student: '/my/classes',
 }

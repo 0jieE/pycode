@@ -11,6 +11,7 @@ import { useMonitorSnapshot } from '@/api/queries/monitor'
 import { useMyClasses } from '@/api/queries/myClasses'
 import { useAuth } from '@/auth/AuthContext'
 import { STORAGE_ROLE_PAGES, USER_ROLE_PAGES } from '@/lib/adminRoutes'
+import { UserMenu } from './UserMenu'
 
 /** Where a page's own buttons go in the top bar (see TopbarActions). */
 const useSlot = create<{ el: HTMLElement | null; set: (el: HTMLElement | null) => void }>(
@@ -59,7 +60,7 @@ function useCrumbs(): Crumb[] {
   const studentLessons = useLessons({ enabled: inTutorial && user?.role === 'student' })
   const staffLessons = useManageLessons({ enabled: inTutorial && user?.role !== 'student' })
 
-  if (pathname.startsWith('/account')) return [{ label: 'Account settings' }]
+  if (pathname.startsWith('/account')) return [{ label: 'My account' }]
   if (pathname.startsWith('/admin/users')) {
     const page = USER_ROLE_PAGES.find((p) => p.slug === params.role)
     return page
@@ -163,7 +164,6 @@ function useCrumbs(): Crumb[] {
  * buttons and who is signed in on the right.
  */
 export function Topbar() {
-  const { user } = useAuth()
   const crumbs = useCrumbs()
   const setSlot = useSlot((s) => s.set)
 
@@ -199,16 +199,7 @@ export function Topbar() {
 
       <div ref={setSlot} className="ml-auto flex flex-wrap items-center gap-2" />
 
-      {user && (
-        <Link
-          to="/account"
-          title="Account settings"
-          className="hidden min-w-0 rounded-md px-2 py-1 text-right leading-tight hover:bg-hover md:block"
-        >
-          <p className="truncate text-sm font-semibold text-ink-strong">{user.full_name}</p>
-          <p className="truncate text-xs text-ink-muted">@{user.username}</p>
-        </Link>
-      )}
+      <UserMenu />
     </header>
   )
 }

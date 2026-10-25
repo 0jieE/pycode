@@ -77,11 +77,11 @@ export function ActivityBar() {
         </button>
         <Link
           to="/account"
-          title={`Account settings: ${user.full_name} (@${user.username})`}
+          title={`My account: ${user.full_name} (@${user.username})`}
           className="grid size-8 place-items-center rounded-full bg-linear-135 from-brand-600 to-accent text-xs font-semibold text-white shadow-sm hover:brightness-110"
         >
           <span aria-hidden>{initials(user.full_name)}</span>
-          <span className="sr-only">Account settings</span>
+          <span className="sr-only">My account</span>
         </Link>
         <button
           type="button"

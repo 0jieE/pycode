@@ -81,6 +81,8 @@ def new_device() -> TestClient:
 
 def make_user(db: Session, role: Role = Role.STUDENT, username: str = "user1",
               password: str = PASSWORD, **kw) -> User:
+    if role == Role.ADMIN:   # the one administrator (the API never creates one)
+        return user_service.create_admin(db, username, kw.pop("full_name", "Test User"), password)[0]
     return user_service.create_user(
         db,
         UserCreate(username=username, password=password, full_name=kw.pop("full_name", "Test User"),

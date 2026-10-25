@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1 import (activities, auth, classes, enrollments, health, labs, monitor, practice, registration_codes,
-                        run, sessions, storage, test_cases, tutorial, users, workspace, ws)
+                        me, run, sessions, storage, test_cases, tutorial, users, workspace, ws)
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
@@ -26,6 +26,7 @@ app = FastAPI(
 
 app.include_router(health.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(me.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(storage.router, prefix=API_PREFIX)
 app.include_router(registration_codes.router, prefix=API_PREFIX)

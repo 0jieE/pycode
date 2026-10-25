@@ -8,6 +8,7 @@ import {
   newerTest,
   testedFromEvent,
   testsFromSnapshot,
+  sortByStarted,
   type MonitorEvent,
 } from './monitorState'
 
@@ -20,6 +21,9 @@ function student(id: number, patch: Partial<StudentMonitor> = {}): StudentMonito
     last_save: null,
     submitted: false,
     last_submitted_at: null,
+    started_at: null,
+    first_activity_id: null,
+    activity_starts: [],
     ...patch,
   }
 }
@@ -167,9 +171,11 @@ describe('counts and filters', () => {
       online: 2,
       ran: 4,
       submitted: 1,
+      started: 0,
       offline: 3,
       errors: 2,
       notSubmitted: 4,
+      notStarted: 5,
     })
   })
 
@@ -264,5 +270,48 @@ describe('the latest test of each student', () => {
     const a = { ...older, executionId: null }
     const b = { ...older, executionId: null, at: '2026-10-11T09:00:00Z' }
     expect(newerTest(a, b)).toBe(b)
+  })
+})
+
+describe('when students start', () => {
+  const start = (id: number, extra: Record<string, unknown> = {}): MonitorEvent => ({
+    type: 'started',
+    student_id: id,
+    student: `Student ${id}`,
+    ts: '2026-10-25T00:03:00Z',
+    started_at: '2026-10-25T00:03:00Z',
+    ...extra,
+  })
+
+  it('records the first start, then each activity once, and keeps the first times', () => {
+    let list = [student(1), student(2)]
+    list = applyMonitorEvent(list, start(1)).students
+    expect(list[0]!.started_at).toBe('2026-10-25T00:03:00Z')
+    list = applyMonitorEvent(
+      list,
+      start(1, { started_at: '2026-10-25T00:05:00Z', activity_id: 7, activity: 'Lab 3' }),
+    ).students
+    expect(list[0]).toMatchObject({
+      started_at: '2026-10-25T00:03:00Z',
+      first_activity_id: 7,
+      activity_starts: [{ activity_id: 7, title: 'Lab 3', started_at: '2026-10-25T00:05:00Z' }],
+    })
+    // The same again changes nothing (same array: no re-render).
+    const again = applyMonitorEvent(list, start(1, { activity_id: 7, activity: 'Lab 3' }))
+    expect(again.students).toBe(list)
+    // A start from a student the list does not have: reload the snapshot.
+    expect(applyMonitorEvent(list, start(9)).unknownStudent).toBe(true)
+  })
+
+  it('counts and filters those who have not started, and sorts them last', () => {
+    const list = [
+      student(1, { started_at: '2026-10-25T00:09:00Z' }),
+      student(2),
+      student(3, { started_at: '2026-10-25T00:02:00Z' }),
+    ]
+    expect(monitorCounts(list)).toMatchObject({ started: 2, notStarted: 1 })
+    expect(filterStudents(list, 'notstarted').map((s) => s.student.id)).toEqual([2])
+    expect(sortByStarted(list, 'earliest').map((s) => s.student.id)).toEqual([3, 1, 2])
+    expect(sortByStarted(list, 'latest').map((s) => s.student.id)).toEqual([1, 3, 2])
   })
 })

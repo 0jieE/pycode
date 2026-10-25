@@ -30,7 +30,7 @@ test.beforeAll(async ({ browser }) => {
   await admin.getByLabel('Username').fill(a.username)
   await admin.getByLabel('Password').fill(a.password)
   await admin.getByRole('button', { name: 'Sign in' }).click()
-  await expect(admin.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
+  await expect(admin.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
 })
 
 async function openCodesPage() {

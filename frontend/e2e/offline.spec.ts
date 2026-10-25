@@ -64,22 +64,19 @@ test('the guard really catches a request to another host (negative control)', as
   await context.close()
 })
 
-test('admin: login, users, create and import dialogs, registration codes', async () => {
+test('admin: login, users, the new instructor dialog, registration codes', async () => {
   // The public sign-up page, before anyone is signed in.
   await admin.goto('/signup')
   await expect(admin.getByRole('heading', { name: 'Create your account', level: 1 })).toBeVisible()
   await signIn(admin, 'admin')
-  await expect(admin.getByRole('heading', { name: 'Users', level: 1 })).toBeVisible()
+  await expect(admin.getByRole('heading', { name: 'Students', level: 1 })).toBeVisible()
   await admin
     .getByRole('navigation', { name: 'Users list' })
     .getByRole('link', { name: /^Instructors/ })
     .click()
   await expect(admin.getByRole('row', { name: /instructor1/ })).toBeVisible()
-  await admin.getByRole('button', { name: 'New user' }).click()
-  await expect(admin.getByRole('dialog', { name: 'Create user' })).toBeVisible()
-  await admin.keyboard.press('Escape')
-  await admin.getByRole('button', { name: 'Import CSV' }).click()
-  await expect(admin.getByRole('dialog', { name: 'Import students from CSV' })).toBeVisible()
+  await admin.getByRole('button', { name: 'New instructor' }).click()
+  await expect(admin.getByRole('dialog', { name: 'New instructor' })).toBeVisible()
   await admin.keyboard.press('Escape')
 
   // Registration codes: the page, the generate dialog (both tabs).

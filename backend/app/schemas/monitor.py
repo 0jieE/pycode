@@ -28,9 +28,18 @@ class LastTest(BaseModel):
     finished_at: Optional[UTCDatetime]
 
 
+class ActivityStart(BaseModel):
+    activity_id: int
+    title: str
+    started_at: UTCDatetime
+
+
 class StudentMonitor(BaseModel):
     student: StudentBrief
     online: bool
+    started_at: Optional[UTCDatetime] = None    # first workspace access during this session; null = not started
+    first_activity_id: Optional[int] = None     # the first activity they opened a file of, in this session
+    activity_starts: list[ActivityStart] = []   # when they first opened each activity's files, oldest first
     last_run: Optional[LastRun]  # most recent plain Run during this lab session (a Test is last_test, not a run)
     last_test: Optional[LastTest]  # most recent finished Test during this lab session; null if none
     last_save: Optional[UTCDatetime]  # last time the student saved a file (starter files don't count)

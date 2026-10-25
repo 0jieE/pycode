@@ -1,51 +1,38 @@
 import { useState } from 'react'
-import { GraduationCap, KeyRound, Plus, Presentation, ShieldCheck, Users } from 'lucide-react'
+import { GraduationCap, KeyRound, Plus, Presentation } from 'lucide-react'
 import { useRegistrationBatches } from '@/api/queries/registration'
 import { useStorageLimits } from '@/api/queries/storage'
-import { useUsers } from '@/api/queries/users'
-import type { Role } from '@/api/types'
+import { useUserCounts } from '@/api/queries/users'
 import { SidePanel, SidePanelLink, SidePanelNote } from '@/components/SidePanel'
 import { Skeleton } from '@/components/ui/Spinner'
 import { formatBytes } from '@/lib/format'
-import { STORAGE_ROLE_PAGES, USER_ROLE_PAGES, codesOfBatch } from '@/lib/adminRoutes'
+import {
+  STORAGE_ROLE_PAGES,
+  USER_ROLE_PAGES,
+  codesOfBatch,
+  type ManagedRole,
+} from '@/lib/adminRoutes'
 import { matchesSearch } from '@/lib/tableView'
 import { useGenerateCodes } from './generateCodes'
 
-const ROLE_ICON: Record<Role, typeof Users> = {
+const ROLE_ICON: Record<ManagedRole, typeof GraduationCap> = {
   student: GraduationCap,
   instructor: Presentation,
-  admin: ShieldCheck,
 }
 
-/** How many users a role has (the list's total, one row fetched). */
-function useRoleCount(role: Role | ''): number | undefined {
-  return useUsers({ page: 1, size: 1, q: '', role }).data?.total
-}
-
-function RoleLink({ slug, role, label }: { slug: string; role: Role; label: string }) {
-  return (
-    <SidePanelLink
-      to={`/admin/users/${slug}`}
-      icon={ROLE_ICON[role]}
-      label={label}
-      count={useRoleCount(role)}
-    />
-  )
-}
-
-/** Users: everyone, or one role. The search stays in the page. */
+/** Users: the instructors, or the students (with how many there are). The search stays in the page. */
 export function UsersPanel() {
+  const counts = useUserCounts().data
   return (
     <SidePanel title="Users">
-      <SidePanelLink
-        to="/admin/users"
-        end
-        icon={Users}
-        label="All users"
-        count={useRoleCount('')}
-      />
       {USER_ROLE_PAGES.map((p) => (
-        <RoleLink key={p.slug} {...p} />
+        <SidePanelLink
+          key={p.slug}
+          to={`/admin/users/${p.slug}`}
+          icon={ROLE_ICON[p.role]}
+          label={p.label}
+          count={counts ? (p.role === 'student' ? counts.students : counts.instructors) : undefined}
+        />
       ))}
     </SidePanel>
   )
