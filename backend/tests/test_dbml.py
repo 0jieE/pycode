@@ -28,7 +28,8 @@ def test_the_file_is_well_formed() -> None:
     text = FILE.read_text(encoding="utf-8")
     assert text.count("{") == text.count("}")
     tables = set(re.findall(r"^Table (\w+) \{", text, re.M))
-    assert tables == set(Base.metadata.tables)
+    assert tables == set(Base.metadata.tables) | {"alembic_version"}  # the models, plus Alembic's own table
+    assert re.search(r"^Table alembic_version \{\n  version_num varchar\(32\) \[pk, ", text, re.M)
     for left, right in re.findall(r"^Ref: (\w+\.\w+) > (\w+\.\w+)", text, re.M):
         for end in (left, right):
             table, column = end.split(".")

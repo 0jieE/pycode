@@ -10,11 +10,15 @@ import re
 import sys
 from typing import Optional
 
-from sqlalchemy import Column, Computed, Enum, Table
+from sqlalchemy import Column, Computed, Enum, MetaData, String, Table
 from sqlalchemy.dialects import mysql
 
 import app.models  # noqa: F401  (registers every table on Base.metadata)
 from app.core.database import Base
+
+# Alembic's own bookkeeping table (created by `alembic upgrade`, not a model): it is in the real database, so it is
+# shown too. Same definition Alembic uses: version_num VARCHAR(32) NOT NULL, primary key alembic_version_pkc.
+ALEMBIC_VERSION = Table("alembic_version", MetaData(), Column("version_num", String(32), primary_key=True))
 
 # Tables shown together in dbdiagram.io (purely visual).
 GROUPS = {
@@ -25,6 +29,7 @@ GROUPS = {
     "Work_and_runs": ["submissions", "submission_files", "executions"],
     "Labs_and_sign_ins": ["labs", "login_events"],
     "Tutorial": ["tutorial_lessons", "tutorial_progress"],
+    "Migrations": ["alembic_version"],
 }
 
 # Hand-written explanations of the non-obvious parts. Everything else is read from the models.
@@ -48,6 +53,7 @@ TABLE_NOTES = {
     "lab_sessions": "A weekly lab meeting of a class in a lab. It opens itself at starts_at and closes itself at ends_at (Celery beat, every 15 s); the instructor may open it from 15 minutes before and close it any time.",
     "login_events": "Every sign-in, with the lab session of the student (if one of their classes had one open) and its outcome: success, or replaced_other_session when it signed another session of the account out. Addresses are in the audit log only.",
     "executions": "Every Run, test and grading job (kind). lab_session_id and activity_id are NULL for Practice runs; workspace_id is NULL for an instructor trying a test case.",
+    "alembic_version": "Kept by Alembic, not by the application: its single row is the migration the database is at. alembic upgrade head reads it to run only the newer migrations (alembic current shows it).",
 }
 COLUMN_NOTES = {
     ("users", "current_session_id"): "random id of the latest login; NULL after logout",
@@ -92,6 +98,7 @@ COLUMN_NOTES = {
     ("submissions", "hardcode_suspected"): "set by grading: a string literal in the code holds an expected-output line of a hidden case (instructor only, no automatic fail)",
     ("submissions", "hardcode_tests"): "names of those hidden cases",
     ("workspace_files", "size_bytes"): "UTF-8 size of content; counted against the 100 KB file and 2 MB workspace limits",
+    ("alembic_version", "version_num"): "revision id of the latest migration applied, e.g. 0020 (alembic/versions/0020_session_starts.py)",
 }
 
 
@@ -194,7 +201,7 @@ def generate() -> str:
         out += [f"  {v}" for v in values]
         out += ["}", ""]
 
-    for table in tables:
+    for table in [*tables, ALEMBIC_VERSION]:
         out.append(f"Table {table.name} " + "{")
         # id first (stable sort keeps the model's own order for the rest)
         out += [column_line(table, c) for c in sorted(table.columns, key=lambda c: not c.primary_key)]

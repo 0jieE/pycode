@@ -433,6 +433,12 @@ Table submission_files {
   Note: 'Frozen copy of the activity folder at submit time.'
 }
 
+Table alembic_version {
+  version_num varchar(32) [pk, note: 'revision id of the latest migration applied, e.g. 0020 (alembic/versions/0020_session_starts.py)']
+
+  Note: 'Kept by Alembic, not by the application: its single row is the migration the database is at. alembic upgrade head reads it to run only the newer migrations (alembic current shows it).'
+}
+
 Ref: activity_logs.user_id > users.id [delete: set null]
 Ref: classes.instructor_id > users.id
 Ref: registration_codes.created_by > users.id
@@ -507,4 +513,8 @@ TableGroup Labs_and_sign_ins {
 TableGroup Tutorial {
   tutorial_lessons
   tutorial_progress
+}
+
+TableGroup Migrations {
+  alembic_version
 }
