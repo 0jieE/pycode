@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import { HardDrive, KeyRound, Pencil, UserPlus } from 'lucide-react'
+import { HardDrive, KeyRound, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { useResetPassword, useUpdateUser, useUsers } from '@/api/queries/users'
 import { errorMessage } from '@/api/errors'
 import type { User } from '@/api/types'
@@ -16,6 +16,7 @@ import { toast } from '@/components/ui/toastStore'
 import { USER_ROLE_PAGES, roleOfSlug, type ManagedRole } from '@/lib/adminRoutes'
 import { useDebouncedValue } from '@/lib/debounce'
 import { formatDateTime } from '@/lib/time'
+import { DeleteUserDialog } from './DeleteUserDialog'
 import { ConfirmResetDialog, TemporaryPasswordDialog } from './ResetPasswordDialogs'
 import { UserFormDialog } from './UserFormDialog'
 import { UserStorageDialog } from './UserStorageDialog'
@@ -51,6 +52,7 @@ function UsersList({ role }: { role: ManagedRole }) {
   const [toDeactivate, setToDeactivate] = useState<User | null>(null)
   const [toReset, setToReset] = useState<User | null>(null)
   const [storageOf, setStorageOf] = useState<User | null>(null)
+  const [toDelete, setToDelete] = useState<User | null>(null)
   const [newPassword, setNewPassword] = useState<{ user: User; password: string } | null>(null)
 
   function setActive(target: User, isActive: boolean) {
@@ -212,6 +214,15 @@ function UsersList({ role }: { role: ManagedRole }) {
                           Activate
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        aria-label={`Delete ${u.full_name}`}
+                        title="Delete this account and everything that is only theirs"
+                        onClick={() => setToDelete(u)}
+                      >
+                        <Trash2 aria-hidden className="size-3.5" />
+                        Delete
+                      </Button>
                     </div>
                   </Td>
                 </tr>
@@ -231,6 +242,7 @@ function UsersList({ role }: { role: ManagedRole }) {
         onClose={() => setForm(null)}
       />
       <UserStorageDialog user={storageOf} onClose={() => setStorageOf(null)} />
+      <DeleteUserDialog user={toDelete} onClose={() => setToDelete(null)} />
 
       <ConfirmDialog
         open={toDeactivate !== null}

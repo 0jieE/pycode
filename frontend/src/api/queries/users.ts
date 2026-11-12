@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../client'
 import type {
+  DeletePreview,
   ResetPasswordResponse,
   User,
   UserCounts,
@@ -64,5 +65,26 @@ export function useUserCounts() {
   return useQuery({
     queryKey: [...usersKey, 'counts'],
     queryFn: ({ signal }) => api.get<UserCounts>('/users/counts', { signal }),
+  })
+}
+
+/** What deleting this instructor or student would remove, and what (if anything) blocks it. Always fresh. */
+export function useDeletePreview(userId: number | null) {
+  return useQuery({
+    queryKey: [...usersKey, userId, 'delete-preview'],
+    queryFn: ({ signal }) => api.get<DeletePreview>(`/users/${userId}/delete-preview`, { signal }),
+    enabled: userId !== null,
+    gcTime: 0,
+    staleTime: 0,
+  })
+}
+
+/** Permanent. The dialog shows a refusal (USER_HAS_CLASSES, USER_RUN_ACTIVE...) inline. */
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete<void>(`/users/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: usersKey }),
+    meta: { silent: true },
   })
 }

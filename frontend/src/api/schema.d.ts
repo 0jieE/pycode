@@ -247,11 +247,37 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete User
+         * @description Permanently deletes an instructor or student and everything that is only theirs (workspaces, submissions and
+         *     grades, runs, enrollments, tutorial progress). 409 USER_HAS_CLASSES / USER_RUN_ACTIVE (body: blocked_by) when
+         *     something blocks it; 409 ADMIN_PROTECTED for the administrator. Their sessions end at once.
+         */
+        delete: operations["delete_user_api_v1_users__user_id__delete"];
         options?: never;
         head?: never;
         /** Update User */
         patch: operations["update_user_api_v1_users__user_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/delete-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delete Preview
+         * @description What deleting this instructor or student would remove, and `blocked_by` (empty = the delete will work).
+         */
+        get: operations["delete_preview_api_v1_users__user_id__delete_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/users/{user_id}/reset-password": {
@@ -1864,6 +1890,46 @@ export interface components {
              * @default
              */
             content: string;
+        };
+        /** DeleteBlocker */
+        DeleteBlocker: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * DeletePreview
+         * @description What deleting this account would remove. `blocked_by` empty = DELETE /users/{id} will succeed.
+         */
+        DeletePreview: {
+            /** User Id */
+            user_id: number;
+            /** Username */
+            username: string;
+            /** Full Name */
+            full_name: string;
+            role: components["schemas"]["Role"];
+            /** Classes */
+            classes: number;
+            /** Enrollments */
+            enrollments: number;
+            /** Submissions */
+            submissions: number;
+            /** Executions */
+            executions: number;
+            /** Workspaces */
+            workspaces: number;
+            /** Workspace Files */
+            workspace_files: number;
+            /** Workspace Bytes */
+            workspace_bytes: number;
+            /** Tutorial Lessons */
+            tutorial_lessons: number;
+            /** In Open Session */
+            in_open_session: boolean;
+            /** Blocked By */
+            blocked_by: components["schemas"]["DeleteBlocker"][];
         };
         /** EnrollRequest */
         EnrollRequest: {
@@ -3755,6 +3821,35 @@ export interface operations {
             };
         };
     };
+    delete_user_api_v1_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_user_api_v1_users__user_id__patch: {
         parameters: {
             query?: never;
@@ -3777,6 +3872,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_preview_api_v1_users__user_id__delete_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePreview"];
                 };
             };
             /** @description Validation Error */

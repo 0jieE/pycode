@@ -87,14 +87,13 @@ def test_the_admin_account_cannot_be_deactivated_demoted_or_edited_here(admin, d
     assert r.status_code == 403 and r.json()["code"] == "ADMIN_ROLE_RESERVED"
 
 
-def test_the_admin_password_cannot_be_reset_through_users_and_nothing_is_deleted(admin, db: Session) -> None:
+def test_the_admin_password_cannot_be_reset_through_users_and_the_admin_cannot_be_deleted(admin, db: Session) -> None:
     me = admin.get(f"{API}/me").json()
     r = admin.post(f"{API}/users/{me['id']}/reset-password")
     assert r.status_code == 409 and r.json()["code"] == "ADMIN_PROTECTED"
     assert "python -m app.reset_admin" in r.json()["detail"]
-    bob = admin.post(f"{API}/users", json=STUDENT).json()
-    for uid in (me["id"], bob["id"]):                     # there is no way to delete an account at all
-        assert admin.delete(f"{API}/users/{uid}").status_code == 405
+    r = admin.delete(f"{API}/users/{me['id']}")               # instructors and students can be (test_user_delete)
+    assert r.status_code == 409 and r.json()["code"] == "ADMIN_PROTECTED"
     assert admins(db) == 1
 
 

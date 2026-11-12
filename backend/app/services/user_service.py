@@ -3,13 +3,20 @@ import io
 import logging
 from typing import Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
 from app.core.security import generate_temp_password, hash_password
+from app.models.classroom import Classroom
+from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.execution import Execution, ExecutionStatus
+from app.models.lab_session import LabSession
+from app.models.submission import Submission
+from app.models.tutorial import TutorialProgress
 from app.models.user import Role, User
+from app.models.workspace import Workspace, WorkspaceFile
 from app.schemas.user import (
     PASSWORD_MAX,
     PASSWORD_MIN,
@@ -197,6 +204,99 @@ def reset_password(db: Session, user_id: int, new_password: Optional[str], actor
     )
     db.commit()
     return password
+
+
+# ------------------------------------------------------------------------------- deleting an account
+# A hard delete: the account and everything that is only theirs (workspaces with files and versions, submissions
+# with grades and snapshots, runs and their output, enrollments, tutorial progress, sign-in log, session starts).
+# Kept: the audit trail (its rows lose the user id; the deletion itself is recorded with the username).
+# Refused while it would break something else: an instructor who still owns classes (a class cannot be deleted or
+# given to another instructor, and deleting it would take the students' grades with it), or a run still in progress.
+
+def _blockers(db: Session, user: User, classes: int) -> list[dict[str, str]]:
+    blocked = []
+    if classes:
+        blocked.append({"code": "USER_HAS_CLASSES", "message": (
+            f"This instructor still owns {classes} class{'es' if classes != 1 else ''}. Classes cannot be deleted "
+            "or moved to another instructor, so deactivate the account instead.")})
+    active = db.scalar(select(func.count()).select_from(Execution).where(
+        Execution.student_id == user.id,
+        Execution.status.in_([ExecutionStatus.QUEUED, ExecutionStatus.RUNNING])))
+    if active:
+        blocked.append({"code": "USER_RUN_ACTIVE",
+                        "message": "A run of this account is still in progress. Try again in a few seconds."})
+    return blocked
+
+
+def deletion_preview(db: Session, user_id: int) -> dict:
+    """What DELETE /users/{id} would remove, and what (if anything) blocks it."""
+    user = _managed_user(db, user_id, "deleted")
+    uid = user.id
+    count = lambda stmt: db.scalar(stmt) or 0  # noqa: E731
+    classes = count(select(func.count()).select_from(Classroom).where(Classroom.instructor_id == uid))
+    files = db.execute(
+        select(func.count(), func.coalesce(func.sum(WorkspaceFile.size_bytes), 0))
+        .join(Workspace, Workspace.id == WorkspaceFile.workspace_id)
+        .where(Workspace.student_id == uid, WorkspaceFile.is_folder.is_(False))).one()
+    open_class_ids = select(Enrollment.class_id).where(
+        Enrollment.student_id == uid, Enrollment.status == EnrollmentStatus.APPROVED)
+    owned_class_ids = select(Classroom.id).where(Classroom.instructor_id == uid)
+    in_open_session = db.scalar(select(LabSession.id).where(
+        LabSession.is_open.is_(True),
+        or_(LabSession.class_id.in_(open_class_ids), LabSession.class_id.in_(owned_class_ids))).limit(1)) is not None
+    return {
+        "user_id": uid, "username": user.username, "full_name": user.full_name, "role": user.role,
+        "classes": classes,
+        "enrollments": count(select(func.count()).select_from(Enrollment).where(Enrollment.student_id == uid)),
+        "submissions": count(select(func.count()).select_from(Submission).where(Submission.student_id == uid)),
+        "executions": count(select(func.count()).select_from(Execution).where(Execution.student_id == uid)),
+        "workspaces": count(select(func.count()).select_from(Workspace).where(Workspace.student_id == uid)),
+        "workspace_files": int(files[0]), "workspace_bytes": int(files[1]),
+        "tutorial_lessons": count(select(func.count()).select_from(TutorialProgress)
+                                  .where(TutorialProgress.student_id == uid)),
+        "in_open_session": in_open_session,
+        "blocked_by": _blockers(db, user, classes),
+    }
+
+
+def delete_user(db: Session, user_id: int, actor: User, ip: Optional[str] = None) -> None:
+    """Hard-deletes an instructor or student (see above). Their signed-in sessions end at once: the next request
+    with their token gets 401, and an open WebSocket is closed within 20 s."""
+    _managed_user(db, user_id, "deleted")
+    # Lock the account row first: a class, submission or run being created for it at the same moment (each takes a
+    # shared lock on this row through its foreign key) waits for this transaction instead of slipping past the checks.
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
+    if user is None:
+        raise NotFoundError("User not found", "USER_NOT_FOUND")
+    preview = deletion_preview(db, user_id)
+    if preview["blocked_by"]:
+        first = preview["blocked_by"][0]
+        db.rollback()
+        raise ConflictError(first["message"], first["code"], blocked_by=preview["blocked_by"],
+                            classes=preview["classes"])
+
+    uid = user.id
+    no_sync = {"synchronize_session": False}
+    db.execute(delete(Execution).where(Execution.student_id == uid), execution_options=no_sync)
+    db.execute(delete(Submission).where(Submission.student_id == uid), execution_options=no_sync)  # + files
+    db.execute(update(Enrollment).where(Enrollment.reviewed_by == uid).values(reviewed_by=None),
+               execution_options=no_sync)
+    db.execute(delete(Enrollment).where(Enrollment.student_id == uid), execution_options=no_sync)
+    db.execute(delete(Workspace).where(Workspace.student_id == uid), execution_options=no_sync)  # + files, versions
+    audit_service.record(db, audit_service.USER_DELETE, user_id=actor.id, ip_address=ip, details={
+        "target_id": uid, "username": user.username, "role": user.role.value,
+        **{k: preview[k] for k in ("enrollments", "submissions", "executions", "workspace_files")}})
+    # The rest goes with the row: tutorial progress, sign-in log and session starts (ON DELETE CASCADE); the user id
+    # in the audit trail and on storage limits becomes NULL (ON DELETE SET NULL).
+    db.execute(delete(User).where(User.id == uid), execution_options=no_sync)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.exception("user delete refused by a foreign key", extra={"target_id": uid})
+        raise ConflictError("This account is still referenced by other records and cannot be deleted. "
+                            "Deactivate it instead.", "USER_IN_USE")
+    db.expunge(user)
 
 
 def _validate_import_row(row: dict[str, str]) -> Optional[str]:

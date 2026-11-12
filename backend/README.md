@@ -96,7 +96,7 @@ volume predates it, see `mysql/init/01-test-db.sh`). Tests use Redis database 1;
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/login` (httpOnly cookie) · `POST /auth/logout` · `GET /auth/me` · `POST /auth/register` (public student sign-up, below) · `PATCH /auth/me` and `POST /auth/change-password` (every role: my own account, below) · `GET/PATCH /me` and `POST /me/change-password` (the same, every role) |
-| Admin | `GET/POST /users` · `GET /users/counts` · `PATCH /users/{id}` · `POST /users/{id}/reset-password` · `POST /users/import` (CSV: `student_no,full_name,username,temp_password`) · registration codes: `POST/GET /registration-codes`, `GET /registration-codes/batches`, `DELETE /registration-codes/{id}`, `DELETE /registration-codes?batch=NAME` |
+| Admin | `GET/POST /users` · `GET /users/counts` · `PATCH /users/{id}` · `GET /users/{id}/delete-preview` · `DELETE /users/{id}` · `POST /users/{id}/reset-password` · `POST /users/import` (CSV: `student_no,full_name,username,temp_password`) · registration codes: `POST/GET /registration-codes`, `GET /registration-codes/batches`, `DELETE /registration-codes/{id}`, `DELETE /registration-codes?batch=NAME` |
 | Instructor | classes, invite codes, enrollments (approve/reject/remove), lab sessions (open/close), activities (publish), submissions, read-only student workspaces, `GET /sessions/{id}/monitor`, and the **automatic test cases**: `GET/POST /activities/{id}/test-cases` · `PATCH /activities/{id}/test-cases/order` · `PATCH/DELETE /test-cases/{id}` · `POST /test-cases/{id}/try` · `POST /activities/{id}/regrade` (below) |
 | Student | `POST /enroll`, `GET /my/classes`, workspace tree/files/versions, `POST /workspace/{class_id}/run` (`mode`: interactive or batch, below), `GET /executions/{id}`, `POST /activities/{id}/submit`, `GET /classes/{class_id}/my-submissions` (my latest submission per activity: `[{activity_id, status, submitted_at}]`, approved students only, not paginated), `GET /activities/{id}/test-cases/student` (the test cases a student may see), `POST /workspace/{class_id}/test` (the **Test** button: run the activity's test cases), and the personal **Practice** workspace `/practice/*` (below; instructors have one too) |
 
@@ -138,8 +138,18 @@ The system has **exactly one administrator account**, created by the first setup
   other than `student` skips that row.
 * The administrator account cannot be changed, deactivated, demoted or have its password reset through `/users`:
   **`409 ADMIN_PROTECTED`** ("The administrator account cannot be changed, deactivated or demoted here. The
-  administrator changes its own name and password under My account."). No account can be deleted (there is no
-  delete endpoint).
+  administrator changes its own name and password under My account."), and it cannot be deleted (also `409
+  ADMIN_PROTECTED`).
+* **Deleting an instructor or student** (admin): `GET /users/{id}/delete-preview` -> `{user_id, username, full_name,
+  role, classes, enrollments, submissions, executions, workspaces, workspace_files, workspace_bytes,
+  tutorial_lessons, in_open_session, blocked_by: [{code, message}]}`, then `DELETE /users/{id}` -> `204`. A hard
+  delete of the account and everything only theirs: workspaces (files, versions), submissions (grades, snapshots),
+  runs and their output, enrollments, tutorial progress, sign-in log, session starts. The audit trail stays (its rows
+  lose the user id; `user_delete` records the username and counts). Their sessions end at once (next request `401`,
+  an open WebSocket closes within 20 s) and the username can be used again. Refused with `409` and `blocked_by` in the
+  body: **`USER_HAS_CLASSES`** (an instructor who still owns classes, archived ones too; `classes` = how many;
+  deactivate them instead) and **`USER_RUN_ACTIVE`** (a run is queued or running). `in_open_session` is a warning
+  only.
 * `GET /users` lists instructors and students only (never the administrator); `?role=` accepts `instructor` or
   `student` (`admin` is `422`). `GET /users/counts` -> `{instructors, students}`.
 * The administrator manages its own account like everyone else: **`GET /me`**, **`PATCH /me`** `{full_name}`

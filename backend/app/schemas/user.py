@@ -81,6 +81,29 @@ class ImportResult(BaseModel):
     errors: list[ImportRowError]
 
 
+class DeleteBlocker(BaseModel):
+    code: str       # USER_HAS_CLASSES | USER_RUN_ACTIVE
+    message: str    # readable, can be shown as is
+
+
+class DeletePreview(BaseModel):
+    """What deleting this account would remove. `blocked_by` empty = DELETE /users/{id} will succeed."""
+    user_id: int
+    username: str
+    full_name: str
+    role: Role
+    classes: int            # classes the instructor owns (archived ones too)
+    enrollments: int        # the student's class memberships (any status)
+    submissions: int        # submitted activities, with their grades and file snapshots
+    executions: int         # runs, test runs and grading jobs, with their output
+    workspaces: int         # class workspaces + the Practice workspace
+    workspace_files: int    # files (not folders) in those workspaces
+    workspace_bytes: int
+    tutorial_lessons: int   # tutorial lessons with saved progress
+    in_open_session: bool   # a class of theirs has a lab session open right now (a warning, not a block)
+    blocked_by: list[DeleteBlocker]
+
+
 class UserCounts(BaseModel):
     """GET /users/counts: the accounts the admin manages (the administrator itself is not counted)."""
 

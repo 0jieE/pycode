@@ -7,6 +7,7 @@ from app.core.deps import PageParams, client_ip, get_db, pagination, require_rol
 from app.models.user import Role, User
 from app.schemas.common import Page
 from app.schemas.user import (
+    DeletePreview,
     ImportResult,
     ResetPasswordRequest,
     ResetPasswordResponse,
@@ -71,6 +72,21 @@ def update_user(
     db: Session = Depends(get_db),
 ) -> User:
     return user_service.update_user(db, user_id, body, actor, client_ip(request))
+
+
+@router.get("/{user_id}/delete-preview", response_model=DeletePreview)
+def delete_preview(user_id: int, _: User = Depends(admin_only), db: Session = Depends(get_db)) -> DeletePreview:
+    """What deleting this instructor or student would remove, and `blocked_by` (empty = the delete will work)."""
+    return DeletePreview(**user_service.deletion_preview(db, user_id))
+
+
+@router.delete("/{user_id}", status_code=204)
+def delete_user(user_id: int, request: Request, actor: User = Depends(admin_only),
+                db: Session = Depends(get_db)) -> None:
+    """Permanently deletes an instructor or student and everything that is only theirs (workspaces, submissions and
+    grades, runs, enrollments, tutorial progress). 409 USER_HAS_CLASSES / USER_RUN_ACTIVE (body: blocked_by) when
+    something blocks it; 409 ADMIN_PROTECTED for the administrator. Their sessions end at once."""
+    user_service.delete_user(db, user_id, actor, client_ip(request))
 
 
 @router.post("/{user_id}/reset-password", response_model=ResetPasswordResponse)
